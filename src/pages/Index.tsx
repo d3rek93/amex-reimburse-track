@@ -88,9 +88,6 @@ const Index = () => {
     setUploading(true);
     
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-
       const { data: sessionData } = await supabase.auth.getSession();
       
       if (!sessionData.session) {
@@ -102,8 +99,19 @@ const Index = () => {
         return;
       }
 
+      // Convert file to base64
+      const reader = new FileReader();
+      const fileContent = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
       const { data, error } = await supabase.functions.invoke('parse-amex-pdf', {
-        body: formData,
+        body: { 
+          fileName: file.name,
+          fileContent: fileContent.split(',')[1], // Remove data:application/pdf;base64, prefix
+        },
       });
 
       if (error) throw error;

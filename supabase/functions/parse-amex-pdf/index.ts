@@ -21,10 +21,9 @@ serve(async (req) => {
   }
 
   try {
-    const formData = await req.formData();
-    const file = formData.get('file') as File;
+    const { fileName, fileContent } = await req.json();
     
-    if (!file) {
+    if (!fileContent) {
       return new Response(
         JSON.stringify({ error: 'No file provided' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -54,8 +53,15 @@ serve(async (req) => {
       );
     }
 
-    // Read PDF file content
-    const arrayBuffer = await file.arrayBuffer();
+    console.log('Processing PDF for user:', user.id);
+
+    // Decode base64 file content
+    const binaryString = atob(fileContent);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    const arrayBuffer = bytes.buffer;
     const text = await extractTextFromPDF(arrayBuffer);
     
     // Parse transactions from the text
