@@ -1,93 +1,159 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
 import { ExpenseUpload } from "@/components/ExpenseUpload";
 import { ExpenseTable, Expense } from "@/components/ExpenseTable";
 import { ExpenseFilters } from "@/components/ExpenseFilters";
 import { ExpenseStats } from "@/components/ExpenseStats";
 import { useToast } from "@/hooks/use-toast";
-import { FileText } from "lucide-react";
+import { FileText, LogOut, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Session } from "@supabase/supabase-js";
 
 const Index = () => {
+  const navigate = useNavigate();
   const { toast } = useToast();
+  const [session, setSession] = useState<Session | null>(null);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
 
-  const handleUpload = (file: File) => {
-    // Mock data for demonstration - will be replaced with actual PDF parsing
-    const mockExpenses: Expense[] = [
-      {
-        id: "1",
-        date: "2025-09-25",
-        description: "3CPAYMENT*MAMA SHELTER LUXEMBOURG",
-        amountEur: 204.0,
-        expenseNumber: "",
-        reimbursementStatus: "pending",
-        reimbursedAmount: 0,
-        isPersonal: false,
-      },
-      {
-        id: "2",
-        date: "2025-09-29",
-        description: "UBER TRIP",
-        amountEur: 29.28,
-        expenseNumber: "",
-        reimbursementStatus: "pending",
-        reimbursedAmount: 0,
-        isPersonal: false,
-      },
-      {
-        id: "3",
-        date: "2025-10-04",
-        description: "3CPAYMENT*MOEVENPICK GE WEGGIS",
-        originalAmount: 173.75,
-        originalCurrency: "CHF",
-        conversionFees: 17.67,
-        amountEur: 191.42,
-        expenseNumber: "",
-        reimbursementStatus: "pending",
-        reimbursedAmount: 0,
-        isPersonal: false,
-      },
-      {
-        id: "4",
-        date: "2025-10-07",
-        description: "LUFTHANSA.COM",
-        originalAmount: 654.82,
-        originalCurrency: "USD",
-        conversionFees: 49.58,
-        amountEur: 645.28,
-        expenseNumber: "",
-        reimbursementStatus: "pending",
-        reimbursedAmount: 0,
-        isPersonal: false,
-      },
-      {
-        id: "5",
-        date: "2025-10-11",
-        description: "THE CONNAUGHT",
-        originalAmount: 473.75,
-        originalCurrency: "GBP",
-        conversionFees: 90.43,
-        amountEur: 564.18,
-        expenseNumber: "",
-        reimbursementStatus: "pending",
-        reimbursedAmount: 0,
-        isPersonal: false,
-      },
-    ];
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, currentSession) => {
+        setSession(currentSession);
+        if (!currentSession) {
+          navigate("/auth");
+        }
+      }
+    );
 
-    setExpenses(mockExpenses);
-    toast({
-      title: "Relevé importé avec succès",
-      description: `${mockExpenses.length} transactions détectées`,
+    supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
+      setSession(currentSession);
+      if (!currentSession) {
+        navigate("/auth");
+      } else {
+        loadExpenses();
+      }
     });
+
+    return () => subscription.unsubscribe();
+  }, [navigate]);
+
+  const loadExpenses = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('expenses')
+        .select('*')
+        .order('date', { ascending: false });
+
+      if (error) throw error;
+
+      const formattedExpenses: Expense[] = data.map((expense) => ({
+        id: expense.id,
+        date: expense.date,
+        description: expense.description,
+        originalAmount: expense.original_amount ?? undefined,
+        originalCurrency: expense.original_currency ?? undefined,
+        conversionFees: expense.conversion_fees ?? undefined,
+        amountEur: expense.amount_eur,
+        expenseNumber: expense.expense_number ?? undefined,
+        reimbursementStatus: expense.reimbursement_status as "pending" | "partial" | "complete",
+        reimbursedAmount: expense.reimbursed_amount,
+        isPersonal: expense.is_personal,
+      }));
+
+      setExpenses(formattedExpenses);
+    } catch (error) {
+      console.error('Error loading expenses:', error);
+      toast({
+        title: "Erreur",
+        description: "Impossible de charger les dépenses",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleUpdateExpense = (id: string, updates: Partial<Expense>) => {
-    setExpenses((prev) =>
-      prev.map((expense) => (expense.id === id ? { ...expense, ...updates } : expense))
-    );
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    navigate("/auth");
+  };
+
+  const handleUpload = async (file: File) => {
+    setUploading(true);
+    
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const { data: sessionData } = await supabase.auth.getSession();
+      
+      if (!sessionData.session) {
+        toast({
+          title: "Erreur",
+          description: "Vous devez être connecté",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke('parse-amex-pdf', {
+        body: formData,
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Relevé importé avec succès",
+        description: `${data.transactionsCount} transactions détectées`,
+      });
+
+      // Reload expenses after upload
+      await loadExpenses();
+    } catch (error) {
+      console.error('Error uploading PDF:', error);
+      toast({
+        title: "Erreur d'import",
+        description: "Impossible de traiter le fichier PDF",
+        variant: "destructive",
+      });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleUpdateExpense = async (id: string, updates: Partial<Expense>) => {
+    try {
+      const dbUpdates: any = {};
+      
+      if (updates.expenseNumber !== undefined) dbUpdates.expense_number = updates.expenseNumber;
+      if (updates.reimbursementStatus !== undefined) dbUpdates.reimbursement_status = updates.reimbursementStatus;
+      if (updates.reimbursedAmount !== undefined) dbUpdates.reimbursed_amount = updates.reimbursedAmount;
+      if (updates.isPersonal !== undefined) dbUpdates.is_personal = updates.isPersonal;
+
+      const { error } = await supabase
+        .from('expenses')
+        .update(dbUpdates)
+        .eq('id', id);
+
+      if (error) throw error;
+
+      setExpenses((prev) =>
+        prev.map((expense) => (expense.id === id ? { ...expense, ...updates } : expense))
+      );
+    } catch (error) {
+      console.error('Error updating expense:', error);
+      toast({
+        title: "Erreur",
+        description: "Impossible de mettre à jour la dépense",
+        variant: "destructive",
+      });
+    }
   };
 
   const filteredExpenses = expenses.filter((expense) => {
@@ -108,25 +174,51 @@ const Index = () => {
     setEndDate("");
   };
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!session) {
+    return null;
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto py-8 px-4 space-y-8">
-        <header className="flex items-center gap-3">
-          <div className="rounded-lg bg-primary p-3">
-            <FileText className="h-8 w-8 text-primary-foreground" />
+        <header className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="rounded-lg bg-primary p-3">
+              <FileText className="h-8 w-8 text-primary-foreground" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight">
+                Suivi des Notes de Frais
+              </h1>
+              <p className="text-muted-foreground">
+                Gérez vos remboursements AMEX en toute simplicité
+              </p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">
-              Suivi des Notes de Frais
-            </h1>
-            <p className="text-muted-foreground">
-              Gérez vos remboursements AMEX en toute simplicité
-            </p>
-          </div>
+          <Button variant="outline" onClick={handleSignOut}>
+            <LogOut className="h-4 w-4 mr-2" />
+            Déconnexion
+          </Button>
         </header>
 
         {expenses.length === 0 ? (
-          <ExpenseUpload onUpload={handleUpload} />
+          <div className="space-y-4">
+            {uploading && (
+              <div className="flex items-center justify-center gap-2 text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>Traitement du PDF en cours...</span>
+              </div>
+            )}
+            <ExpenseUpload onUpload={handleUpload} />
+          </div>
         ) : (
           <>
             <ExpenseStats expenses={expenses} />

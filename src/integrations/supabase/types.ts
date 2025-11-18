@@ -14,7 +14,57 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      expenses: {
+        Row: {
+          amount_eur: number
+          conversion_fees: number | null
+          created_at: string
+          date: string
+          description: string
+          expense_number: string | null
+          id: string
+          is_personal: boolean
+          original_amount: number | null
+          original_currency: string | null
+          reimbursed_amount: number
+          reimbursement_status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount_eur: number
+          conversion_fees?: number | null
+          created_at?: string
+          date: string
+          description: string
+          expense_number?: string | null
+          id?: string
+          is_personal?: boolean
+          original_amount?: number | null
+          original_currency?: string | null
+          reimbursed_amount?: number
+          reimbursement_status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount_eur?: number
+          conversion_fees?: number | null
+          created_at?: string
+          date?: string
+          description?: string
+          expense_number?: string | null
+          id?: string
+          is_personal?: boolean
+          original_amount?: number | null
+          original_currency?: string | null
+          reimbursed_amount?: number
+          reimbursement_status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
