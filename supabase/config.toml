@@ -1,1 +1,4 @@
 project_id = "cdopymrsflwvevwweasl"
+
+[functions.parse-amex-pdf]
+verify_jwt = true
