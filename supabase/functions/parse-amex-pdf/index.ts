@@ -1,7 +1,6 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0';
-import * as pdfjs from 'https://esm.sh/pdfjs-dist@4.0.379/legacy/build/pdf.mjs';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -125,30 +124,48 @@ serve(async (req) => {
 
 async function extractTextFromPDF(arrayBuffer: ArrayBuffer): Promise<string> {
   try {
-    // Use PDF.js to properly extract text from PDF
-    const loadingTask = pdfjs.getDocument({ data: arrayBuffer });
-    const pdf = await loadingTask.promise;
+    console.log('Starting basic PDF text extraction');
     
-    let fullText = '';
+    // Convert to string and look for text patterns
+    const uint8Array = new Uint8Array(arrayBuffer);
+    let text = '';
     
-    // Extract text from all pages
-    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-      const page = await pdf.getPage(pageNum);
-      const textContent = await page.getTextContent();
-      
-      // Combine all text items from the page
-      const pageText = textContent.items
-        .map((item: any) => item.str)
-        .join(' ');
-      
-      fullText += pageText + '\n';
+    // Decode as latin1 to preserve all bytes
+    for (let i = 0; i < uint8Array.length; i++) {
+      text += String.fromCharCode(uint8Array[i]);
     }
     
-    console.log('PDF text extraction successful');
-    console.log('Total extracted text length:', fullText.length);
-    console.log('First 1000 chars:', fullText.substring(0, 1000));
+    console.log('Raw PDF length:', text.length);
     
-    return fullText;
+    // Extract text between parentheses (PDF text objects)
+    const textMatches = text.match(/\((.*?)\)/gs);
+    let extractedText = '';
+    
+    if (textMatches) {
+      console.log('Found', textMatches.length, 'text objects');
+      extractedText = textMatches
+        .map(match => match.slice(1, -1)) // Remove parentheses
+        .join(' ')
+        .replace(/\\([nrt])/g, ' ') // Replace escape sequences
+        .replace(/\s+/g, ' '); // Normalize whitespace
+    }
+    
+    // Also try to extract from streams
+    const streamPattern = /stream\s+([\s\S]*?)\s+endstream/g;
+    let streamMatch;
+    while ((streamMatch = streamPattern.exec(text)) !== null) {
+      const streamContent = streamMatch[1];
+      // Look for readable text in stream
+      const readableText = streamContent.match(/[a-zA-Z0-9\s€$£¥.,;:!?()-]+/g);
+      if (readableText) {
+        extractedText += ' ' + readableText.join(' ');
+      }
+    }
+    
+    console.log('Extracted text length:', extractedText.length);
+    console.log('First 1000 chars:', extractedText.substring(0, 1000));
+    
+    return extractedText;
   } catch (error) {
     console.error('Error extracting PDF text:', error);
     throw new Error('Failed to extract text from PDF');
