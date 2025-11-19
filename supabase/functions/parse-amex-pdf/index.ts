@@ -119,15 +119,39 @@ serve(async (req) => {
 });
 
 async function extractTextFromPDF(arrayBuffer: ArrayBuffer): Promise<string> {
-  // Simple text extraction - in production, you'd use a proper PDF parsing library
-  const decoder = new TextDecoder('utf-8');
-  const text = decoder.decode(arrayBuffer);
+  // Extract text from PDF using a simple approach
+  const decoder = new TextDecoder('utf-8', { fatal: false });
+  let text = decoder.decode(arrayBuffer);
+  
+  console.log('PDF raw text length:', text.length);
+  console.log('PDF first 500 chars:', text.substring(0, 500));
+  
+  // Try to extract readable text between stream markers
+  const streamPattern = /stream\s+([\s\S]*?)\s+endstream/g;
+  let matches = text.match(streamPattern);
+  
+  if (matches) {
+    console.log('Found', matches.length, 'streams in PDF');
+    text = matches.join('\n');
+  }
+  
+  // Clean up the text
+  text = text
+    .replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F-\x9F]/g, ' ') // Remove control characters
+    .replace(/\s+/g, ' '); // Normalize whitespace
+  
+  console.log('Cleaned text length:', text.length);
+  console.log('Cleaned first 1000 chars:', text.substring(0, 1000));
+  
   return text;
 }
 
 function parseAmexTransactions(text: string): Transaction[] {
   const transactions: Transaction[] = [];
   const lines = text.split('\n');
+  
+  console.log('Total lines to parse:', lines.length);
+  console.log('First 20 lines:', lines.slice(0, 20));
   
   // Look for transaction lines
   for (let i = 0; i < lines.length; i++) {
@@ -176,6 +200,8 @@ function parseAmexTransactions(text: string): Transaction[] {
       });
     }
   }
+  
+  console.log('Total transactions found:', transactions.length);
   
   return transactions;
 }
