@@ -1,5 +1,7 @@
+import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0';
+import * as pdfjs from 'https://esm.sh/pdfjs-dist@4.0.379/legacy/build/pdf.mjs';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -73,6 +75,9 @@ serve(async (req) => {
     const arrayBuffer = bytes.buffer;
     const text = await extractTextFromPDF(arrayBuffer);
     
+    console.log('Extracted text length:', text.length);
+    console.log('First 1000 chars:', text.substring(0, 1000));
+    
     // Parse transactions from the text
     const transactions = parseAmexTransactions(text);
     
@@ -119,31 +124,35 @@ serve(async (req) => {
 });
 
 async function extractTextFromPDF(arrayBuffer: ArrayBuffer): Promise<string> {
-  // Extract text from PDF using a simple approach
-  const decoder = new TextDecoder('utf-8', { fatal: false });
-  let text = decoder.decode(arrayBuffer);
-  
-  console.log('PDF raw text length:', text.length);
-  console.log('PDF first 500 chars:', text.substring(0, 500));
-  
-  // Try to extract readable text between stream markers
-  const streamPattern = /stream\s+([\s\S]*?)\s+endstream/g;
-  let matches = text.match(streamPattern);
-  
-  if (matches) {
-    console.log('Found', matches.length, 'streams in PDF');
-    text = matches.join('\n');
+  try {
+    // Use PDF.js to properly extract text from PDF
+    const loadingTask = pdfjs.getDocument({ data: arrayBuffer });
+    const pdf = await loadingTask.promise;
+    
+    let fullText = '';
+    
+    // Extract text from all pages
+    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+      const page = await pdf.getPage(pageNum);
+      const textContent = await page.getTextContent();
+      
+      // Combine all text items from the page
+      const pageText = textContent.items
+        .map((item: any) => item.str)
+        .join(' ');
+      
+      fullText += pageText + '\n';
+    }
+    
+    console.log('PDF text extraction successful');
+    console.log('Total extracted text length:', fullText.length);
+    console.log('First 1000 chars:', fullText.substring(0, 1000));
+    
+    return fullText;
+  } catch (error) {
+    console.error('Error extracting PDF text:', error);
+    throw new Error('Failed to extract text from PDF');
   }
-  
-  // Clean up the text
-  text = text
-    .replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F-\x9F]/g, ' ') // Remove control characters
-    .replace(/\s+/g, ' '); // Normalize whitespace
-  
-  console.log('Cleaned text length:', text.length);
-  console.log('Cleaned first 1000 chars:', text.substring(0, 1000));
-  
-  return text;
 }
 
 function parseAmexTransactions(text: string): Transaction[] {
