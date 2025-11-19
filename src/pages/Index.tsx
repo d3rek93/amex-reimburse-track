@@ -99,38 +99,100 @@ const Index = () => {
         return;
       }
 
-      // Convert file to base64
-      const reader = new FileReader();
-      const fileContent = await new Promise<string>((resolve, reject) => {
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
+      // Check if it's a CSV file
+      if (file.name.endsWith('.csv')) {
+        // Parse CSV file
+        const text = await file.text();
+        const lines = text.split('\n');
+        
+        // Skip header
+        const dataLines = lines.slice(1).filter(line => line.trim());
+        
+        const expenses = dataLines.map(line => {
+          // Parse CSV line (handle quoted values)
+          const matches = line.match(/(?:^|,)("(?:[^"]|"")*"|[^,]*)/g);
+          if (!matches || matches.length < 3) return null;
+          
+          const dateStr = matches[0].replace(/^,?"?|"?$/g, '');
+          const description = matches[1].replace(/^,?"?|"?$/g, '');
+          const amountStr = matches[2].replace(/^,?"?|"?$/g, '').replace(',', '.');
+          
+          // Parse date (MM/DD/YYYY to YYYY-MM-DD)
+          const [month, day, year] = dateStr.split('/');
+          const date = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+          
+          // Parse amount (remove quotes and convert comma to dot)
+          const amount = Math.abs(parseFloat(amountStr));
+          
+          // Skip negative amounts (payments)
+          if (amountStr.startsWith('-')) return null;
+          
+          return {
+            user_id: sessionData.session.user.id,
+            date,
+            description,
+            amount_eur: amount,
+            reimbursement_status: 'pending',
+            reimbursed_amount: 0,
+            is_personal: false,
+          };
+        }).filter(Boolean);
 
-      const { data, error } = await supabase.functions.invoke('parse-amex-pdf', {
-        body: { 
-          fileName: file.name,
-          fileContent: fileContent.split(',')[1], // Remove data:application/pdf;base64, prefix
-        },
-        headers: {
-          Authorization: `Bearer ${sessionData.session.access_token}`,
-        },
-      });
+        if (expenses.length === 0) {
+          toast({
+            title: "Aucune transaction trouvée",
+            description: "Le fichier CSV ne contient pas de transactions valides",
+            variant: "destructive",
+          });
+          return;
+        }
 
-      if (error) throw error;
+        // Insert all expenses
+        const { error } = await supabase
+          .from('expenses')
+          .insert(expenses);
 
-      toast({
-        title: "Relevé importé avec succès",
-        description: `${data.transactionsCount} transactions détectées`,
-      });
+        if (error) throw error;
 
-      // Reload expenses after upload
-      await loadExpenses();
+        toast({
+          title: "Import réussi",
+          description: `${expenses.length} transactions importées`,
+        });
+
+        await loadExpenses();
+      } else {
+        // Handle PDF files (existing code)
+        const reader = new FileReader();
+        const fileContent = await new Promise<string>((resolve, reject) => {
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+
+        const { data, error } = await supabase.functions.invoke('parse-amex-pdf', {
+          body: { 
+            fileName: file.name,
+            fileContent: fileContent.split(',')[1],
+          },
+          headers: {
+            Authorization: `Bearer ${sessionData.session.access_token}`,
+          },
+        });
+
+        if (error) throw error;
+
+        toast({
+          title: "Relevé importé avec succès",
+          description: `${data.transactionsCount} transactions détectées`,
+        });
+
+        await loadExpenses();
+      }
     } catch (error) {
-      console.error('Error uploading PDF:', error);
+      console.error('Error uploading file:', error);
       toast({
         title: "Erreur d'import",
-        description: "Impossible de traiter le fichier PDF",
+        description: "Impossible de traiter le fichier",
         variant: "destructive",
       });
     } finally {
