@@ -26,12 +26,12 @@ export const ExpenseUpload = ({ onUpload }: ExpenseUploadProps) => {
     setIsDragging(false);
     
     const file = e.dataTransfer.files[0];
-    if (file && file.type === "application/pdf") {
+    if (file && (file.type === "application/pdf" || file.name.endsWith('.csv'))) {
       onUpload(file);
     } else {
       toast({
         title: "Fichier invalide",
-        description: "Veuillez télécharger un fichier PDF",
+        description: "Veuillez télécharger un fichier PDF ou CSV",
         variant: "destructive",
       });
     }
@@ -62,12 +62,12 @@ export const ExpenseUpload = ({ onUpload }: ExpenseUploadProps) => {
             Importer un relevé AMEX
           </h3>
           <p className="text-sm text-muted-foreground mb-4">
-            Glissez-déposez votre fichier PDF ou cliquez pour parcourir
+            Glissez-déposez votre fichier PDF ou CSV, ou cliquez pour parcourir
           </p>
         </div>
         <input
           type="file"
-          accept=".pdf"
+          accept=".pdf,.csv"
           onChange={handleFileInput}
           className="hidden"
           id="file-upload"
