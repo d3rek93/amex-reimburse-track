@@ -112,6 +112,9 @@ const Index = () => {
           fileName: file.name,
           fileContent: fileContent.split(',')[1], // Remove data:application/pdf;base64, prefix
         },
+        headers: {
+          Authorization: `Bearer ${sessionData.session.access_token}`,
+        },
       });
 
       if (error) throw error;
