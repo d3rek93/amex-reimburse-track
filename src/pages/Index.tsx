@@ -18,6 +18,8 @@ const Index = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [showPersonal, setShowPersonal] = useState(false);
+  const [showReimbursed, setShowReimbursed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
 
@@ -238,13 +240,21 @@ const Index = () => {
     const matchesStartDate = !startDate || expenseDate >= new Date(startDate);
     const matchesEndDate = !endDate || expenseDate <= new Date(endDate);
 
-    return matchesSearch && matchesStartDate && matchesEndDate;
+    // Filter out personal expenses if showPersonal is false
+    const matchesPersonal = showPersonal || !expense.isPersonal;
+    
+    // Filter out reimbursed expenses if showReimbursed is false
+    const matchesReimbursed = showReimbursed || expense.reimbursementStatus === "pending";
+
+    return matchesSearch && matchesStartDate && matchesEndDate && matchesPersonal && matchesReimbursed;
   });
 
   const handleResetFilters = () => {
     setSearchQuery("");
     setStartDate("");
     setEndDate("");
+    setShowPersonal(false);
+    setShowReimbursed(false);
   };
 
   if (loading) {
@@ -282,36 +292,45 @@ const Index = () => {
           </Button>
         </header>
 
-        {expenses.length === 0 ? (
-          <div className="space-y-4">
-            {uploading && (
-              <div className="flex items-center justify-center gap-2 text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span>Traitement du PDF en cours...</span>
-              </div>
-            )}
+        <div className="space-y-4">
+          {uploading && (
+            <div className="flex items-center justify-center gap-2 text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span>Traitement du fichier en cours...</span>
+            </div>
+          )}
+          
+          {expenses.length === 0 ? (
             <ExpenseUpload onUpload={handleUpload} />
-          </div>
-        ) : (
-          <>
-            <ExpenseStats expenses={expenses} />
-            
-            <ExpenseFilters
-              searchQuery={searchQuery}
-              onSearchChange={setSearchQuery}
-              startDate={startDate}
-              endDate={endDate}
-              onStartDateChange={setStartDate}
-              onEndDateChange={setEndDate}
-              onReset={handleResetFilters}
-            />
+          ) : (
+            <>
+              <ExpenseStats expenses={expenses} />
+              
+              <ExpenseFilters
+                searchQuery={searchQuery}
+                onSearchChange={setSearchQuery}
+                startDate={startDate}
+                endDate={endDate}
+                onStartDateChange={setStartDate}
+                onEndDateChange={setEndDate}
+                showPersonal={showPersonal}
+                showReimbursed={showReimbursed}
+                onShowPersonalChange={setShowPersonal}
+                onShowReimbursedChange={setShowReimbursed}
+                onReset={handleResetFilters}
+              />
 
-            <ExpenseTable
-              expenses={filteredExpenses}
-              onUpdateExpense={handleUpdateExpense}
-            />
-          </>
-        )}
+              <div className="flex justify-end mb-4">
+                <ExpenseUpload onUpload={handleUpload} />
+              </div>
+
+              <ExpenseTable
+                expenses={filteredExpenses}
+                onUpdateExpense={handleUpdateExpense}
+              />
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

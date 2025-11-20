@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Edit2, Check, X } from "lucide-react";
 
 export interface Expense {
@@ -28,6 +29,7 @@ interface ExpenseTableProps {
 export const ExpenseTable = ({ expenses, onUpdateExpense }: ExpenseTableProps) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
+  const [partialAmounts, setPartialAmounts] = useState<Record<string, number>>({});
 
   const handleEdit = (expense: Expense) => {
     setEditingId(expense.id);
@@ -37,6 +39,37 @@ export const ExpenseTable = ({ expenses, onUpdateExpense }: ExpenseTableProps) =
   const handleSave = (id: string) => {
     onUpdateExpense(id, { expenseNumber: editValue });
     setEditingId(null);
+  };
+
+  const handleReimbursementChange = (expense: Expense, value: string) => {
+    if (value === "complete") {
+      onUpdateExpense(expense.id, {
+        reimbursementStatus: "complete",
+        reimbursedAmount: expense.amountEur,
+      });
+    } else if (value === "partial") {
+      const amount = partialAmounts[expense.id] || 0;
+      onUpdateExpense(expense.id, {
+        reimbursementStatus: "partial",
+        reimbursedAmount: amount,
+      });
+    } else {
+      onUpdateExpense(expense.id, {
+        reimbursementStatus: "pending",
+        reimbursedAmount: 0,
+      });
+    }
+  };
+
+  const handlePartialAmountChange = (expenseId: string, amount: number) => {
+    setPartialAmounts(prev => ({ ...prev, [expenseId]: amount }));
+    const expense = expenses.find(e => e.id === expenseId);
+    if (expense) {
+      onUpdateExpense(expenseId, {
+        reimbursementStatus: "partial",
+        reimbursedAmount: amount,
+      });
+    }
   };
 
   const getStatusBadge = (status: Expense["reimbursementStatus"]) => {
@@ -61,9 +94,8 @@ export const ExpenseTable = ({ expenses, onUpdateExpense }: ExpenseTableProps) =
             <TableHead>Frais conv.</TableHead>
             <TableHead>Montant EUR</TableHead>
             <TableHead>N° Note de frais</TableHead>
-            <TableHead>Statut</TableHead>
-            <TableHead>Remboursé</TableHead>
-            <TableHead>Actions</TableHead>
+            <TableHead>Remboursement</TableHead>
+            <TableHead>Montant</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -121,32 +153,37 @@ export const ExpenseTable = ({ expenses, onUpdateExpense }: ExpenseTableProps) =
                   </div>
                 )}
               </TableCell>
-              <TableCell>{getStatusBadge(expense.reimbursementStatus)}</TableCell>
               <TableCell>
-                <Input
-                  type="number"
-                  step="0.01"
-                  value={expense.reimbursedAmount}
-                  onChange={(e) =>
-                    onUpdateExpense(expense.id, {
-                      reimbursedAmount: parseFloat(e.target.value) || 0,
-                      reimbursementStatus:
-                        parseFloat(e.target.value) >= expense.amountEur
-                          ? "complete"
-                          : parseFloat(e.target.value) > 0
-                          ? "partial"
-                          : "pending",
-                    })
-                  }
-                  className="h-8 w-24"
-                />
+                <Select
+                  value={expense.reimbursementStatus}
+                  onValueChange={(value) => handleReimbursementChange(expense, value)}
+                >
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending">Non remboursé</SelectItem>
+                    <SelectItem value="partial">Remboursé partiellement</SelectItem>
+                    <SelectItem value="complete">Remboursé</SelectItem>
+                  </SelectContent>
+                </Select>
               </TableCell>
               <TableCell>
-                {expense.reimbursedAmount >= expense.amountEur && (
-                  <Badge className="bg-success text-success-foreground">
-                    <Check className="h-3 w-3 mr-1" />
-                    Clôturé
-                  </Badge>
+                {expense.reimbursementStatus === "partial" ? (
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={partialAmounts[expense.id] ?? expense.reimbursedAmount}
+                    onChange={(e) =>
+                      handlePartialAmountChange(expense.id, parseFloat(e.target.value) || 0)
+                    }
+                    className="h-8 w-24"
+                    placeholder="Montant"
+                  />
+                ) : expense.reimbursementStatus === "complete" ? (
+                  <span className="text-muted-foreground">{expense.amountEur.toFixed(2)} €</span>
+                ) : (
+                  <span className="text-muted-foreground">-</span>
                 )}
               </TableCell>
             </TableRow>
