@@ -19,6 +19,7 @@ export interface Expense {
   reimbursementStatus: "pending" | "partial" | "complete";
   reimbursedAmount: number;
   isPersonal: boolean;
+  source: "AMEX" | "Boursobank" | "Manuel";
 }
 
 interface ExpenseTableProps {
@@ -88,6 +89,7 @@ export const ExpenseTable = ({ expenses, onUpdateExpense }: ExpenseTableProps) =
         <TableHeader>
           <TableRow>
             <TableHead>Personnel</TableHead>
+            <TableHead>Source</TableHead>
             <TableHead>Date</TableHead>
             <TableHead>Description</TableHead>
             <TableHead>Montant original</TableHead>
@@ -108,6 +110,11 @@ export const ExpenseTable = ({ expenses, onUpdateExpense }: ExpenseTableProps) =
                     onUpdateExpense(expense.id, { isPersonal: checked as boolean })
                   }
                 />
+              </TableCell>
+              <TableCell>
+                <Badge variant={expense.source === "AMEX" ? "default" : "secondary"}>
+                  {expense.source}
+                </Badge>
               </TableCell>
               <TableCell className="font-medium">{expense.date}</TableCell>
               <TableCell>{expense.description}</TableCell>

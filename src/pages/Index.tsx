@@ -66,6 +66,7 @@ const Index = () => {
         reimbursementStatus: expense.reimbursement_status as "pending" | "partial" | "complete",
         reimbursedAmount: expense.reimbursed_amount,
         isPersonal: expense.is_personal,
+        source: (expense.source as "AMEX" | "Boursobank" | "Manuel") || "AMEX",
       }));
 
       setExpenses(formattedExpenses);
@@ -143,6 +144,7 @@ const Index = () => {
               reimbursement_status: 'pending',
               reimbursed_amount: 0,
               is_personal: false,
+              source: 'Boursobank',
             };
           }).filter(Boolean);
         } else {
@@ -176,6 +178,7 @@ const Index = () => {
               reimbursement_status: 'pending',
               reimbursed_amount: 0,
               is_personal: false,
+              source: 'AMEX',
             };
           }).filter(Boolean);
         }
