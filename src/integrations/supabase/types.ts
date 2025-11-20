@@ -28,6 +28,7 @@ export type Database = {
           original_currency: string | null
           reimbursed_amount: number
           reimbursement_status: string
+          source: string | null
           updated_at: string
           user_id: string
         }
@@ -44,6 +45,7 @@ export type Database = {
           original_currency?: string | null
           reimbursed_amount?: number
           reimbursement_status?: string
+          source?: string | null
           updated_at?: string
           user_id: string
         }
@@ -60,6 +62,7 @@ export type Database = {
           original_currency?: string | null
           reimbursed_amount?: number
           reimbursement_status?: string
+          source?: string | null
           updated_at?: string
           user_id?: string
         }
