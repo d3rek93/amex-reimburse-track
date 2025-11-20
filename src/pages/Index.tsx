@@ -107,38 +107,78 @@ const Index = () => {
         const text = await file.text();
         const lines = text.split('\n');
         
-        // Skip header
-        const dataLines = lines.slice(1).filter(line => line.trim());
+        // Check if it's a Boursobank CSV (contains semicolon separator and specific columns)
+        const isBoursobank = lines[0] && lines[0].includes('dateOp;dateVal;label;') && lines[0].includes('accountLabel');
         
-        const expenses = dataLines.map(line => {
-          // Parse CSV line (handle quoted values)
-          const matches = line.match(/(?:^|,)("(?:[^"]|"")*"|[^,]*)/g);
-          if (!matches || matches.length < 3) return null;
+        let expenses;
+        
+        if (isBoursobank) {
+          // Parse Boursobank format
+          const dataLines = lines.slice(1).filter(line => line.trim());
           
-          const dateStr = matches[0].replace(/^,?"?|"?$/g, '');
-          const description = matches[1].replace(/^,?"?|"?$/g, '');
-          const amountStr = matches[2].replace(/^,?"?|"?$/g, '').replace(',', '.');
+          expenses = dataLines.map(line => {
+            // Split by semicolon
+            const columns = line.split(';').map(col => col.replace(/^"?|"?$/g, '').trim());
+            
+            if (columns.length < 11) return null;
+            
+            const dateOp = columns[0];
+            const label = columns[2];
+            const amountStr = columns[6];
+            const accountLabel = columns[9];
+            
+            // Filter: only VISA ULTIM and CARTE transactions
+            if (accountLabel !== 'VISA ULTIM' || !label.startsWith('CARTE')) return null;
+            
+            // Parse amount (replace comma with dot, get absolute value)
+            const amount = Math.abs(parseFloat(amountStr.replace(',', '.')));
+            
+            if (isNaN(amount)) return null;
+            
+            return {
+              user_id: sessionData.session.user.id,
+              date: dateOp,
+              description: label,
+              amount_eur: amount,
+              reimbursement_status: 'pending',
+              reimbursed_amount: 0,
+              is_personal: false,
+            };
+          }).filter(Boolean);
+        } else {
+          // Parse AMEX format (comma-separated)
+          const dataLines = lines.slice(1).filter(line => line.trim());
           
-          // Parse date (MM/DD/YYYY to YYYY-MM-DD)
-          const [month, day, year] = dateStr.split('/');
-          const date = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-          
-          // Parse amount (remove quotes and convert comma to dot)
-          const amount = Math.abs(parseFloat(amountStr));
-          
-          // Skip negative amounts (payments)
-          if (amountStr.startsWith('-')) return null;
-          
-          return {
-            user_id: sessionData.session.user.id,
-            date,
-            description,
-            amount_eur: amount,
-            reimbursement_status: 'pending',
-            reimbursed_amount: 0,
-            is_personal: false,
-          };
-        }).filter(Boolean);
+          expenses = dataLines.map(line => {
+            // Parse CSV line (handle quoted values)
+            const matches = line.match(/(?:^|,)("(?:[^"]|"")*"|[^,]*)/g);
+            if (!matches || matches.length < 3) return null;
+            
+            const dateStr = matches[0].replace(/^,?"?|"?$/g, '');
+            const description = matches[1].replace(/^,?"?|"?$/g, '');
+            const amountStr = matches[2].replace(/^,?"?|"?$/g, '').replace(',', '.');
+            
+            // Parse date (MM/DD/YYYY to YYYY-MM-DD)
+            const [month, day, year] = dateStr.split('/');
+            const date = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+            
+            // Parse amount (remove quotes and convert comma to dot)
+            const amount = Math.abs(parseFloat(amountStr));
+            
+            // Skip negative amounts (payments)
+            if (amountStr.startsWith('-')) return null;
+            
+            return {
+              user_id: sessionData.session.user.id,
+              date,
+              description,
+              amount_eur: amount,
+              reimbursement_status: 'pending',
+              reimbursed_amount: 0,
+              is_personal: false,
+            };
+          }).filter(Boolean);
+        }
 
         if (expenses.length === 0) {
           toast({
