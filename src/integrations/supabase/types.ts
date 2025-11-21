@@ -68,6 +68,48 @@ export type Database = {
         }
         Relationships: []
       }
+      reimbursements: {
+        Row: {
+          amount_eur: number
+          category: string
+          created_at: string
+          expense_date: string
+          expense_number: string
+          id: string
+          matched_expense_id: string | null
+          payment_date: string
+          payment_reference: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount_eur: number
+          category: string
+          created_at?: string
+          expense_date: string
+          expense_number: string
+          id?: string
+          matched_expense_id?: string | null
+          payment_date: string
+          payment_reference: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount_eur?: number
+          category?: string
+          created_at?: string
+          expense_date?: string
+          expense_number?: string
+          id?: string
+          matched_expense_id?: string | null
+          payment_date?: string
+          payment_reference?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
