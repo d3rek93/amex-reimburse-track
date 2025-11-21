@@ -1,16 +1,18 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { Navigation } from "@/components/Navigation";
 import { ExpenseUpload } from "@/components/ExpenseUpload";
 import { ExpenseTable, Expense } from "@/components/ExpenseTable";
 import { ExpenseFilters } from "@/components/ExpenseFilters";
-import { ExpenseStats } from "@/components/ExpenseStats";
 import { useToast } from "@/hooks/use-toast";
-import { FileText, LogOut, Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Loader2, Upload } from "lucide-react";
 import { Session } from "@supabase/supabase-js";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import * as XLSX from 'xlsx';
 
-const Index = () => {
+const Expenses = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [session, setSession] = useState<Session | null>(null);
@@ -22,6 +24,7 @@ const Index = () => {
   const [showReimbursed, setShowReimbursed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [showUploadDialog, setShowUploadDialog] = useState(false);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -82,9 +85,21 @@ const Index = () => {
     }
   };
 
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    navigate("/auth");
+  const checkForDuplicates = async (newExpenses: any[]) => {
+    const { data: existingExpenses } = await supabase
+      .from('expenses')
+      .select('date, amount_eur, description');
+
+    if (!existingExpenses) return newExpenses;
+
+    // Filter out duplicates (same date, amount, and description)
+    return newExpenses.filter((newExp) => {
+      return !existingExpenses.some((existing) => 
+        existing.date === newExp.date &&
+        Math.abs(existing.amount_eur - newExp.amount_eur) < 0.01 &&
+        existing.description === newExp.description
+      );
+    });
   };
 
   const handleUpload = async (file: File) => {
@@ -102,23 +117,19 @@ const Index = () => {
         return;
       }
 
+      let expenses: any[] = [];
+
       // Check if it's a CSV file
       if (file.name.endsWith('.csv')) {
-        // Parse CSV file
         const text = await file.text();
         const lines = text.split('\n');
         
-        // Check if it's a Boursobank CSV (contains semicolon separator and specific columns)
         const isBoursobank = lines[0] && lines[0].includes('dateOp;dateVal;label;') && lines[0].includes('accountLabel');
         
-        let expenses;
-        
         if (isBoursobank) {
-          // Parse Boursobank format
           const dataLines = lines.slice(1).filter(line => line.trim());
           
           expenses = dataLines.map(line => {
-            // Split by semicolon
             const columns = line.split(';').map(col => col.replace(/^"?|"?$/g, '').trim());
             
             if (columns.length < 11) return null;
@@ -128,10 +139,8 @@ const Index = () => {
             const amountStr = columns[6];
             const accountLabel = columns[9];
             
-            // Filter: only VISA ULTIM and CARTE transactions
             if (accountLabel !== 'VISA ULTIM' || !label.startsWith('CARTE')) return null;
             
-            // Parse amount (replace comma with dot, get absolute value)
             const amount = Math.abs(parseFloat(amountStr.replace(',', '.')));
             
             if (isNaN(amount)) return null;
@@ -148,11 +157,9 @@ const Index = () => {
             };
           }).filter(Boolean);
         } else {
-          // Parse AMEX format (comma-separated)
           const dataLines = lines.slice(1).filter(line => line.trim());
           
           expenses = dataLines.map(line => {
-            // Parse CSV line (handle quoted values)
             const matches = line.match(/(?:^|,)("(?:[^"]|"")*"|[^,]*)/g);
             if (!matches || matches.length < 3) return null;
             
@@ -160,14 +167,11 @@ const Index = () => {
             const description = matches[1].replace(/^,?"?|"?$/g, '');
             const amountStr = matches[2].replace(/^,?"?|"?$/g, '').replace(',', '.');
             
-            // Parse date (MM/DD/YYYY to YYYY-MM-DD)
             const [month, day, year] = dateStr.split('/');
             const date = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
             
-            // Parse amount (remove quotes and convert comma to dot)
             const amount = Math.abs(parseFloat(amountStr));
             
-            // Skip negative amounts (payments)
             if (amountStr.startsWith('-')) return null;
             
             return {
@@ -182,57 +186,107 @@ const Index = () => {
             };
           }).filter(Boolean);
         }
+      } else if (file.name.endsWith('.xls') || file.name.endsWith('.xlsx')) {
+        // Handle XLS/XLSX files (reimbursements)
+        const data = await file.arrayBuffer();
+        const workbook = XLSX.read(data, { type: 'array' });
+        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+        const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 }) as any[][];
+        
+        // Parse reimbursements from XLS
+        const reimbursements: any[] = [];
+        let currentPaymentDate = '';
+        let currentPaymentRef = '';
+        
+        for (const row of jsonData) {
+          if (row[1] && typeof row[1] === 'string' && row[1].match(/^\d{2}\/\d{2}\/\d{4}$/)) {
+            // This is a payment date row
+            currentPaymentDate = row[1];
+            currentPaymentRef = row[3] || '';
+          } else if (row[4] && typeof row[4] === 'string' && row[4].match(/^\d+\s-/)) {
+            // This is an expense detail row
+            const parts = row[4].split(' - ');
+            if (parts.length >= 3) {
+              const expenseNumber = parts[0].trim();
+              const expenseDate = parts[1].trim();
+              const category = parts.slice(2).join(' - ').trim();
+              const amount = parseFloat(row[7]);
+              
+              if (!isNaN(amount)) {
+                // Convert date from DD/MM/YYYY to YYYY-MM-DD
+                const [day, month, year] = expenseDate.split('/');
+                const formattedDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+                
+                reimbursements.push({
+                  user_id: sessionData.session.user.id,
+                  payment_date: currentPaymentDate,
+                  payment_reference: currentPaymentRef,
+                  expense_number: expenseNumber,
+                  expense_date: formattedDate,
+                  category,
+                  amount_eur: amount,
+                });
+              }
+            }
+          }
+        }
+        
+        if (reimbursements.length > 0) {
+          // Insert reimbursements
+          const { error } = await supabase
+            .from('reimbursements')
+            .insert(reimbursements);
 
-        if (expenses.length === 0) {
+          if (error) throw error;
+
           toast({
-            title: "Aucune transaction trouvée",
-            description: "Le fichier CSV ne contient pas de transactions valides",
-            variant: "destructive",
+            title: "Remboursements importés",
+            description: `${reimbursements.length} remboursements importés`,
           });
+          
+          setShowUploadDialog(false);
           return;
         }
-
-        // Insert all expenses
-        const { error } = await supabase
-          .from('expenses')
-          .insert(expenses);
-
-        if (error) throw error;
-
-        toast({
-          title: "Import réussi",
-          description: `${expenses.length} transactions importées`,
-        });
-
-        await loadExpenses();
-      } else {
-        // Handle PDF files (existing code)
-        const reader = new FileReader();
-        const fileContent = await new Promise<string>((resolve, reject) => {
-          reader.onload = () => resolve(reader.result as string);
-          reader.onerror = reject;
-          reader.readAsDataURL(file);
-        });
-
-        const { data, error } = await supabase.functions.invoke('parse-amex-pdf', {
-          body: { 
-            fileName: file.name,
-            fileContent: fileContent.split(',')[1],
-          },
-          headers: {
-            Authorization: `Bearer ${sessionData.session.access_token}`,
-          },
-        });
-
-        if (error) throw error;
-
-        toast({
-          title: "Relevé importé avec succès",
-          description: `${data.transactionsCount} transactions détectées`,
-        });
-
-        await loadExpenses();
       }
+
+      if (expenses.length === 0) {
+        toast({
+          title: "Aucune transaction trouvée",
+          description: "Le fichier ne contient pas de transactions valides",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Check for duplicates
+      const uniqueExpenses = await checkForDuplicates(expenses);
+      const duplicateCount = expenses.length - uniqueExpenses.length;
+
+      if (uniqueExpenses.length === 0) {
+        toast({
+          title: "Doublons détectés",
+          description: `Toutes les ${expenses.length} transactions sont déjà présentes`,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Insert unique expenses
+      const { error } = await supabase
+        .from('expenses')
+        .insert(uniqueExpenses);
+
+      if (error) throw error;
+
+      toast({
+        title: "Import réussi",
+        description: duplicateCount > 0 
+          ? `${uniqueExpenses.length} transactions importées, ${duplicateCount} doublons ignorés`
+          : `${uniqueExpenses.length} transactions importées`,
+      });
+
+      await loadExpenses();
+      setShowUploadDialog(false);
     } catch (error) {
       console.error('Error uploading file:', error);
       toast({
@@ -274,6 +328,31 @@ const Index = () => {
     }
   };
 
+  const handleDeleteExpense = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('expenses')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      setExpenses((prev) => prev.filter((expense) => expense.id !== id));
+      
+      toast({
+        title: "Dépense supprimée",
+        description: "La dépense a été supprimée avec succès",
+      });
+    } catch (error) {
+      console.error('Error deleting expense:', error);
+      toast({
+        title: "Erreur",
+        description: "Impossible de supprimer la dépense",
+        variant: "destructive",
+      });
+    }
+  };
+
   const filteredExpenses = expenses.filter((expense) => {
     const matchesSearch =
       expense.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -283,10 +362,7 @@ const Index = () => {
     const matchesStartDate = !startDate || expenseDate >= new Date(startDate);
     const matchesEndDate = !endDate || expenseDate <= new Date(endDate);
 
-    // Filter out personal expenses if showPersonal is false
     const matchesPersonal = showPersonal || !expense.isPersonal;
-    
-    // Filter out reimbursed expenses if showReimbursed is false
     const matchesReimbursed = showReimbursed || expense.reimbursementStatus === "pending";
 
     return matchesSearch && matchesStartDate && matchesEndDate && matchesPersonal && matchesReimbursed;
@@ -314,69 +390,70 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="container mx-auto py-8 px-4 space-y-8">
-        <header className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="rounded-lg bg-primary p-3">
-              <FileText className="h-8 w-8 text-primary-foreground" />
-            </div>
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight">
-                Suivi des Notes de Frais
-              </h1>
-              <p className="text-muted-foreground">
-                Gérez vos remboursements AMEX en toute simplicité
-              </p>
-            </div>
+      <Navigation onUpload={() => setShowUploadDialog(true)} />
+      
+      <div className="container mx-auto py-8 px-4 space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight mb-2">Dépenses</h1>
+            <p className="text-muted-foreground">
+              Gérez vos dépenses professionnelles
+            </p>
           </div>
-          <Button variant="outline" onClick={handleSignOut}>
-            <LogOut className="h-4 w-4 mr-2" />
-            Déconnexion
-          </Button>
-        </header>
-
-        <div className="space-y-4">
-          {uploading && (
-            <div className="flex items-center justify-center gap-2 text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              <span>Traitement du fichier en cours...</span>
-            </div>
-          )}
-          
-          {expenses.length === 0 ? (
-            <ExpenseUpload onUpload={handleUpload} />
-          ) : (
-            <>
-              <ExpenseStats expenses={expenses} />
-              
-              <ExpenseFilters
-                searchQuery={searchQuery}
-                onSearchChange={setSearchQuery}
-                startDate={startDate}
-                endDate={endDate}
-                onStartDateChange={setStartDate}
-                onEndDateChange={setEndDate}
-                showPersonal={showPersonal}
-                showReimbursed={showReimbursed}
-                onShowPersonalChange={setShowPersonal}
-                onShowReimbursedChange={setShowReimbursed}
-                onReset={handleResetFilters}
-              />
-
-              <div className="flex justify-end mb-4">
-                <ExpenseUpload onUpload={handleUpload} />
-              </div>
-
-              <ExpenseTable
-                expenses={filteredExpenses}
-                onUpdateExpense={handleUpdateExpense}
-              />
-            </>
-          )}
         </div>
+
+        {uploading && (
+          <div className="flex items-center justify-center gap-2 text-muted-foreground bg-muted p-4 rounded-lg">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span>Traitement du fichier en cours...</span>
+          </div>
+        )}
+        
+        {expenses.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12 space-y-4">
+            <p className="text-muted-foreground">Aucune dépense enregistrée</p>
+            <Button onClick={() => setShowUploadDialog(true)}>
+              <Upload className="h-4 w-4 mr-2" />
+              Importer des dépenses
+            </Button>
+          </div>
+        ) : (
+          <>
+            <ExpenseFilters
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+              startDate={startDate}
+              endDate={endDate}
+              onStartDateChange={setStartDate}
+              onEndDateChange={setEndDate}
+              showPersonal={showPersonal}
+              showReimbursed={showReimbursed}
+              onShowPersonalChange={setShowPersonal}
+              onShowReimbursedChange={setShowReimbursed}
+              onReset={handleResetFilters}
+            />
+
+            <ExpenseTable
+              expenses={filteredExpenses}
+              onUpdateExpense={handleUpdateExpense}
+              onDeleteExpense={handleDeleteExpense}
+            />
+          </>
+        )}
       </div>
+
+      <Dialog open={showUploadDialog} onOpenChange={setShowUploadDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Importer des fichiers</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <ExpenseUpload onUpload={handleUpload} />
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
 
-export default Index;
+export default Expenses;

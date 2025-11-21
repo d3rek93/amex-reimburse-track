@@ -1,0 +1,105 @@
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { Navigation } from "@/components/Navigation";
+import { ExpenseStats } from "@/components/ExpenseStats";
+import { Expense } from "@/components/ExpenseTable";
+import { useToast } from "@/hooks/use-toast";
+import { Loader2 } from "lucide-react";
+import { Session } from "@supabase/supabase-js";
+
+const Stats = () => {
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const [session, setSession] = useState<Session | null>(null);
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, currentSession) => {
+        setSession(currentSession);
+        if (!currentSession) {
+          navigate("/auth");
+        }
+      }
+    );
+
+    supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
+      setSession(currentSession);
+      if (!currentSession) {
+        navigate("/auth");
+      } else {
+        loadExpenses();
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [navigate]);
+
+  const loadExpenses = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('expenses')
+        .select('*')
+        .order('date', { ascending: false });
+
+      if (error) throw error;
+
+      const formattedExpenses: Expense[] = data.map((expense) => ({
+        id: expense.id,
+        date: expense.date,
+        description: expense.description,
+        originalAmount: expense.original_amount ?? undefined,
+        originalCurrency: expense.original_currency ?? undefined,
+        conversionFees: expense.conversion_fees ?? undefined,
+        amountEur: expense.amount_eur,
+        expenseNumber: expense.expense_number ?? undefined,
+        reimbursementStatus: expense.reimbursement_status as "pending" | "partial" | "complete",
+        reimbursedAmount: expense.reimbursed_amount,
+        isPersonal: expense.is_personal,
+        source: (expense.source as "AMEX" | "Boursobank" | "Manuel") || "AMEX",
+      }));
+
+      setExpenses(formattedExpenses);
+    } catch (error) {
+      console.error('Error loading expenses:', error);
+      toast({
+        title: "Erreur",
+        description: "Impossible de charger les dépenses",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!session) {
+    return null;
+  }
+
+  return (
+    <div className="min-h-screen bg-background">
+      <Navigation />
+      <div className="container mx-auto py-8 px-4">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold tracking-tight mb-2">Statistiques</h1>
+          <p className="text-muted-foreground">
+            Vue d'ensemble de vos dépenses professionnelles
+          </p>
+        </div>
+        <ExpenseStats expenses={expenses} />
+      </div>
+    </div>
+  );
+};
+
+export default Stats;

@@ -5,7 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Edit2, Check, X } from "lucide-react";
+import { Edit2, Check, X, Trash2 } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
 export interface Expense {
   id: string;
@@ -25,9 +26,10 @@ export interface Expense {
 interface ExpenseTableProps {
   expenses: Expense[];
   onUpdateExpense: (id: string, updates: Partial<Expense>) => void;
+  onDeleteExpense?: (id: string) => void;
 }
 
-export const ExpenseTable = ({ expenses, onUpdateExpense }: ExpenseTableProps) => {
+export const ExpenseTable = ({ expenses, onUpdateExpense, onDeleteExpense }: ExpenseTableProps) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [partialAmounts, setPartialAmounts] = useState<Record<string, number>>({});
@@ -98,6 +100,7 @@ export const ExpenseTable = ({ expenses, onUpdateExpense }: ExpenseTableProps) =
             <TableHead>N° Note de frais</TableHead>
             <TableHead>Remboursement</TableHead>
             <TableHead>Montant</TableHead>
+            {onDeleteExpense && <TableHead className="w-20">Actions</TableHead>}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -193,6 +196,34 @@ export const ExpenseTable = ({ expenses, onUpdateExpense }: ExpenseTableProps) =
                   <span className="text-muted-foreground">-</span>
                 )}
               </TableCell>
+              {onDeleteExpense && (
+                <TableCell>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive hover:bg-destructive/10">
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Confirmer la suppression</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Êtes-vous sûr de vouloir supprimer cette dépense ? Cette action est irréversible.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Annuler</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={() => onDeleteExpense(expense.id)}
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                          Supprimer
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </TableCell>
+              )}
             </TableRow>
           ))}
         </TableBody>
