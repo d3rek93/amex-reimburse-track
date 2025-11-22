@@ -204,6 +204,11 @@ const Expenses = () => {
         let currentPaymentDate: string | null = null;
         let currentPaymentRef: string | null = null;
         
+        // Get existing reimbursements for duplicate check
+        const { data: existingReimbursements } = await supabase
+          .from('reimbursements')
+          .select('payment_date, expense_date, amount_eur, expense_number');
+        
         for (const row of jsonData) {
           if (!Array.isArray(row)) continue;
 
@@ -262,15 +267,25 @@ const Expenses = () => {
               category = detailMatch[3].trim();
             }
 
-            reimbursements.push({
-              user_id: sessionData.session.user.id,
-              payment_date: currentPaymentDate,
-              payment_reference: currentPaymentRef,
-              expense_number: expenseNumber,
-              expense_date: expenseDate,
-              category,
-              amount_eur: amount,
-            });
+            // Check for duplicate before adding
+            const isDuplicate = existingReimbursements?.some((existing) => 
+              existing.payment_date === currentPaymentDate &&
+              existing.expense_date === expenseDate &&
+              Math.abs(existing.amount_eur - amount) < 0.01 &&
+              existing.expense_number === expenseNumber
+            );
+
+            if (!isDuplicate) {
+              reimbursements.push({
+                user_id: sessionData.session.user.id,
+                payment_date: currentPaymentDate,
+                payment_reference: currentPaymentRef,
+                expense_number: expenseNumber,
+                expense_date: expenseDate,
+                category,
+                amount_eur: amount,
+              });
+            }
           }
         }
         
