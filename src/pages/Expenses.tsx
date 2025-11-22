@@ -281,11 +281,67 @@ const Expenses = () => {
 
           if (error) throw error;
 
+          // Auto-match reimbursements with expenses
+          let matchedCount = 0;
+          const { data: allExpenses } = await supabase
+            .from('expenses')
+            .select('*')
+            .order('date', { ascending: false });
+
+          if (allExpenses) {
+            const insertedReimbursements = await supabase
+              .from('reimbursements')
+              .select('*')
+              .order('created_at', { ascending: false })
+              .limit(reimbursements.length);
+
+            if (insertedReimbursements.data) {
+              for (const reimbursement of insertedReimbursements.data) {
+                // Find matching expense by amount, date (±5 days), and optionally expense_number
+                const matchingExpense = allExpenses.find((exp) => {
+                  const amountMatch = Math.abs(exp.amount_eur - reimbursement.amount_eur) < 0.01;
+                  
+                  const expDate = new Date(exp.date);
+                  const reimbDate = new Date(reimbursement.expense_date);
+                  const daysDiff = Math.abs((expDate.getTime() - reimbDate.getTime()) / (1000 * 60 * 60 * 24));
+                  const dateMatch = daysDiff <= 5;
+                  
+                  const expenseNumberMatch = !reimbursement.expense_number || 
+                    !exp.expense_number || 
+                    exp.expense_number === reimbursement.expense_number;
+                  
+                  return amountMatch && dateMatch && expenseNumberMatch;
+                });
+
+                if (matchingExpense) {
+                  // Update expense with reimbursement info
+                  await supabase
+                    .from('expenses')
+                    .update({
+                      reimbursed_amount: reimbursement.amount_eur,
+                      reimbursement_status: 'complete',
+                      expense_number: reimbursement.expense_number || matchingExpense.expense_number,
+                    })
+                    .eq('id', matchingExpense.id);
+
+                  // Update reimbursement with matched expense id
+                  await supabase
+                    .from('reimbursements')
+                    .update({ matched_expense_id: matchingExpense.id })
+                    .eq('id', reimbursement.id);
+
+                  matchedCount++;
+                }
+              }
+            }
+          }
+
           toast({
             title: 'Remboursements importés',
-            description: `${reimbursements.length} remboursements importés`,
+            description: `${reimbursements.length} remboursements importés, ${matchedCount} automatiquement associés`,
           });
           
+          await loadExpenses();
           setShowUploadDialog(false);
           return;
         }
