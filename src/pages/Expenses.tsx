@@ -12,6 +12,13 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import * as XLSX from 'xlsx';
 
+const excelSerialToDateString = (serial: number): string => {
+  const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+  const ms = serial * 24 * 60 * 60 * 1000;
+  const date = new Date(excelEpoch.getTime() + ms);
+  return date.toISOString().slice(0, 10);
+};
+ 
 const Expenses = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -193,49 +200,81 @@ const Expenses = () => {
         const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
         const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 }) as any[][];
         
-        // Parse reimbursements from XLS
         const reimbursements: any[] = [];
-        let currentPaymentDate = '';
-        let currentPaymentRef = '';
+        let currentPaymentDate: string | null = null;
+        let currentPaymentRef: string | null = null;
         
         for (const row of jsonData) {
-          // PAYMENT DATE is in column C (index 2)
-          // PAYMENT REFERENCE / DETAILS is in column F (index 5)
-          // AMOUNT IN EUROS is in column I (index 8)
-          if (row[2] && typeof row[2] === 'string' && row[2].match(/^\d{2}\/\d{2}\/\d{4}$/)) {
-            // This is a payment date row
-            currentPaymentDate = row[2];
-            currentPaymentRef = row[5] || '';
-          } else if (row[5] && typeof row[5] === 'string' && row[5].match(/^\d+\s-/)) {
-            // This is an expense detail row
-            const parts = row[5].split(' - ');
-            if (parts.length >= 3) {
-              const expenseNumber = parts[0].trim();
-              const expenseDate = parts[1].trim();
-              const category = parts.slice(2).join(' - ').trim();
-              const amount = parseFloat(row[8]);
-              
-              if (!isNaN(amount)) {
-                // Convert date from DD/MM/YYYY to YYYY-MM-DD
-                const [day, month, year] = expenseDate.split('/');
-                const formattedDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-                
-                reimbursements.push({
-                  user_id: sessionData.session.user.id,
-                  payment_date: currentPaymentDate,
-                  payment_reference: currentPaymentRef,
-                  expense_number: expenseNumber,
-                  expense_date: formattedDate,
-                  category,
-                  amount_eur: amount,
-                });
+          if (!Array.isArray(row)) continue;
+
+          const colC = row[2]; // PAYMENT DATE (Excel serial)
+          const colF = row[5]; // PAYMENT REFERENCE / DETAILS
+          const colI = row[8]; // AMOUNT IN EUROS
+
+          const rowText = row
+            .filter((cell) => cell !== null && cell !== undefined)
+            .join(' ');
+
+          if (typeof rowText === 'string' && rowText.includes('Total paid by')) {
+            break;
+          }
+
+          const rawAmount = colI;
+          const amount = typeof rawAmount === 'number'
+            ? rawAmount
+            : parseFloat(String(rawAmount).replace(',', '.'));
+
+          if (isNaN(amount)) {
+            // Rule 1: ignore lines without a valid amount
+            continue;
+          }
+
+          // Rule 2: Parent payment line - new reimbursement batch
+          if (typeof colC === 'number') {
+            currentPaymentDate = excelSerialToDateString(colC);
+            currentPaymentRef = typeof colF === 'string' ? colF.trim() : String(colF ?? '').trim();
+            continue;
+          }
+
+          const hasNoDate = colC === null || colC === undefined || colC === '';
+          const hasDetails = typeof colF === 'string' && colF.trim().length > 0;
+
+          // Rule 3: Child expense line belonging to current payment
+          if (hasNoDate && hasDetails && currentPaymentDate && currentPaymentRef) {
+            const originalDescription = colF.trim();
+
+            // Try to parse: "ID - DD/MM/YYYY - Category - SubCategory"
+            const detailMatch = originalDescription.match(
+              /^(\d+)\s*-\s*([0-9/]+)\s*-\s*([^\-]+?)(?:\s*-\s*(.+))?$/
+            );
+
+            let expenseNumber = '';
+            let expenseDate = currentPaymentDate;
+            let category = 'Unknown';
+
+            if (detailMatch) {
+              expenseNumber = detailMatch[1].trim();
+              const rawDate = detailMatch[2].trim(); // DD/MM/YYYY
+              const [day, month, year] = rawDate.split('/');
+              if (day && month && year) {
+                expenseDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
               }
+              category = detailMatch[3].trim();
             }
+
+            reimbursements.push({
+              user_id: sessionData.session.user.id,
+              payment_date: currentPaymentDate,
+              payment_reference: currentPaymentRef,
+              expense_number: expenseNumber,
+              expense_date: expenseDate,
+              category,
+              amount_eur: amount,
+            });
           }
         }
         
         if (reimbursements.length > 0) {
-          // Insert reimbursements
           const { error } = await supabase
             .from('reimbursements')
             .insert(reimbursements);
@@ -243,7 +282,7 @@ const Expenses = () => {
           if (error) throw error;
 
           toast({
-            title: "Remboursements importés",
+            title: 'Remboursements importés',
             description: `${reimbursements.length} remboursements importés`,
           });
           
