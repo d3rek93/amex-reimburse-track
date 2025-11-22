@@ -199,18 +199,21 @@ const Expenses = () => {
         let currentPaymentRef = '';
         
         for (const row of jsonData) {
-          if (row[0] && typeof row[0] === 'string' && row[0].match(/^\d{2}\/\d{2}\/\d{4}$/)) {
+          // PAYMENT DATE is in column C (index 2)
+          // PAYMENT REFERENCE / DETAILS is in column F (index 5)
+          // AMOUNT IN EUROS is in column I (index 8)
+          if (row[2] && typeof row[2] === 'string' && row[2].match(/^\d{2}\/\d{2}\/\d{4}$/)) {
             // This is a payment date row
-            currentPaymentDate = row[0];
-            currentPaymentRef = row[1] || '';
-          } else if (row[1] && typeof row[1] === 'string' && row[1].match(/^\d+\s-/)) {
+            currentPaymentDate = row[2];
+            currentPaymentRef = row[5] || '';
+          } else if (row[5] && typeof row[5] === 'string' && row[5].match(/^\d+\s-/)) {
             // This is an expense detail row
-            const parts = row[1].split(' - ');
+            const parts = row[5].split(' - ');
             if (parts.length >= 3) {
               const expenseNumber = parts[0].trim();
               const expenseDate = parts[1].trim();
               const category = parts.slice(2).join(' - ').trim();
-              const amount = parseFloat(row[2]);
+              const amount = parseFloat(row[8]);
               
               if (!isNaN(amount)) {
                 // Convert date from DD/MM/YYYY to YYYY-MM-DD
