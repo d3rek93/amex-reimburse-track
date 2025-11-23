@@ -13,9 +13,13 @@ interface ExpenseFiltersProps {
   onStartDateChange: (date: string) => void;
   onEndDateChange: (date: string) => void;
   showPersonal: boolean;
-  showReimbursed: boolean;
+  showPending: boolean;
+  showPartial: boolean;
+  showComplete: boolean;
   onShowPersonalChange: (show: boolean) => void;
-  onShowReimbursedChange: (show: boolean) => void;
+  onShowPendingChange: (show: boolean) => void;
+  onShowPartialChange: (show: boolean) => void;
+  onShowCompleteChange: (show: boolean) => void;
   onReset: () => void;
 }
 
@@ -27,9 +31,13 @@ export const ExpenseFilters = ({
   onStartDateChange,
   onEndDateChange,
   showPersonal,
-  showReimbursed,
+  showPending,
+  showPartial,
+  showComplete,
   onShowPersonalChange,
-  onShowReimbursedChange,
+  onShowPendingChange,
+  onShowPartialChange,
+  onShowCompleteChange,
   onReset,
 }: ExpenseFiltersProps) => {
   return (
@@ -67,26 +75,49 @@ export const ExpenseFilters = ({
           </Button>
         </div>
         
-        <div className="flex gap-6 items-center">
-          <div className="flex items-center gap-2">
-            <Checkbox
-              id="show-personal"
-              checked={showPersonal}
-              onCheckedChange={(checked) => onShowPersonalChange(checked as boolean)}
-            />
-            <Label htmlFor="show-personal" className="cursor-pointer">
-              Afficher les dépenses personnelles
-            </Label>
-          </div>
-          <div className="flex items-center gap-2">
-            <Checkbox
-              id="show-reimbursed"
-              checked={showReimbursed}
-              onCheckedChange={(checked) => onShowReimbursedChange(checked as boolean)}
-            />
-            <Label htmlFor="show-reimbursed" className="cursor-pointer">
-              Afficher les dépenses remboursées
-            </Label>
+        <div className="flex flex-col gap-3">
+          <div className="text-sm font-medium">Filtres de visibilité</div>
+          <div className="flex flex-wrap gap-4">
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="show-personal"
+                checked={showPersonal}
+                onCheckedChange={(checked) => onShowPersonalChange(checked as boolean)}
+              />
+              <Label htmlFor="show-personal" className="cursor-pointer text-sm">
+                Dépenses personnelles
+              </Label>
+            </div>
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="show-pending"
+                checked={showPending}
+                onCheckedChange={(checked) => onShowPendingChange(checked as boolean)}
+              />
+              <Label htmlFor="show-pending" className="cursor-pointer text-sm">
+                Non remboursées
+              </Label>
+            </div>
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="show-partial"
+                checked={showPartial}
+                onCheckedChange={(checked) => onShowPartialChange(checked as boolean)}
+              />
+              <Label htmlFor="show-partial" className="cursor-pointer text-sm">
+                Partiellement remboursées
+              </Label>
+            </div>
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="show-complete"
+                checked={showComplete}
+                onCheckedChange={(checked) => onShowCompleteChange(checked as boolean)}
+              />
+              <Label htmlFor="show-complete" className="cursor-pointer text-sm">
+                Complètement remboursées
+              </Label>
+            </div>
           </div>
         </div>
       </div>

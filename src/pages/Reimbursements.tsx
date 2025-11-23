@@ -148,15 +148,17 @@ const Reimbursements = () => {
           </p>
         </div>
 
-        <div className="flex items-center space-x-2 bg-card p-4 rounded-lg border">
-          <Checkbox
-            id="showMatched"
-            checked={showMatched}
-            onCheckedChange={(checked) => setShowMatched(checked as boolean)}
-          />
-          <Label htmlFor="showMatched" className="cursor-pointer">
-            Afficher les remboursements associés
-          </Label>
+        <div className="flex items-center gap-6 bg-card p-4 rounded-lg border">
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="show-matched"
+              checked={showMatched}
+              onCheckedChange={(checked) => setShowMatched(checked as boolean)}
+            />
+            <Label htmlFor="show-matched" className="cursor-pointer text-sm">
+              Afficher les remboursements associés
+            </Label>
+          </div>
         </div>
 
         <div className="rounded-md border">
