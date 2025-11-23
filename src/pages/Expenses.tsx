@@ -525,7 +525,7 @@ const Expenses = () => {
             .from('expenses')
             .update({
               reimbursed_amount: exp1.amount_eur,
-              reimbursement_status: 'partial',
+              reimbursement_status: 'complete',
               expense_number: newNumbers1,
             })
             .eq('id', exp1.id);
@@ -534,7 +534,7 @@ const Expenses = () => {
             .from('expenses')
             .update({
               reimbursed_amount: exp2.amount_eur,
-              reimbursement_status: 'partial',
+              reimbursement_status: 'complete',
               expense_number: newNumbers2,
             })
             .eq('id', exp2.id);
