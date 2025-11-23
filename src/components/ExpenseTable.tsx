@@ -16,7 +16,7 @@ export interface Expense {
   originalCurrency?: string;
   conversionFees?: number;
   amountEur: number;
-  expenseNumber?: string;
+  expenseNumber?: string[];
   reimbursementStatus: "pending" | "partial" | "complete";
   reimbursedAmount: number;
   isPersonal: boolean;
@@ -36,11 +36,15 @@ export const ExpenseTable = ({ expenses, onUpdateExpense, onDeleteExpense }: Exp
 
   const handleEdit = (expense: Expense) => {
     setEditingId(expense.id);
-    setEditValue(expense.expenseNumber || "");
+    setEditValue(expense.expenseNumber?.join(", ") || "");
   };
 
   const handleSave = (id: string) => {
-    onUpdateExpense(id, { expenseNumber: editValue });
+    const numbers = editValue
+      .split(",")
+      .map(n => n.trim())
+      .filter(n => n.length > 0);
+    onUpdateExpense(id, { expenseNumber: numbers.length > 0 ? numbers : undefined });
     setEditingId(null);
   };
 
@@ -152,7 +156,7 @@ export const ExpenseTable = ({ expenses, onUpdateExpense, onDeleteExpense }: Exp
                   </div>
                 ) : (
                   <div className="flex items-center gap-2">
-                    <span>{expense.expenseNumber || "-"}</span>
+                    <span>{expense.expenseNumber?.join(", ") || "-"}</span>
                     <Button
                       size="sm"
                       variant="ghost"

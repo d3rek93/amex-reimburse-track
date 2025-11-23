@@ -21,7 +21,7 @@ export type Database = {
           created_at: string
           date: string
           description: string
-          expense_number: string | null
+          expense_number: string[] | null
           id: string
           is_personal: boolean
           original_amount: number | null
@@ -38,7 +38,7 @@ export type Database = {
           created_at?: string
           date: string
           description: string
-          expense_number?: string | null
+          expense_number?: string[] | null
           id?: string
           is_personal?: boolean
           original_amount?: number | null
@@ -55,7 +55,7 @@ export type Database = {
           created_at?: string
           date?: string
           description?: string
-          expense_number?: string | null
+          expense_number?: string[] | null
           id?: string
           is_personal?: boolean
           original_amount?: number | null

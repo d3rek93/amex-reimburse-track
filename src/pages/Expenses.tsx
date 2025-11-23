@@ -6,7 +6,7 @@ import { ExpenseUpload } from "@/components/ExpenseUpload";
 import { ExpenseTable, Expense } from "@/components/ExpenseTable";
 import { ExpenseFilters } from "@/components/ExpenseFilters";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Upload } from "lucide-react";
+import { Loader2, Upload, RefreshCw } from "lucide-react";
 import { Session } from "@supabase/supabase-js";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -28,10 +28,13 @@ const Expenses = () => {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [showPersonal, setShowPersonal] = useState(false);
-  const [showReimbursed, setShowReimbursed] = useState(false);
+  const [showPending, setShowPending] = useState(true);
+  const [showPartial, setShowPartial] = useState(true);
+  const [showComplete, setShowComplete] = useState(false);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [showUploadDialog, setShowUploadDialog] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -72,7 +75,7 @@ const Expenses = () => {
         originalCurrency: expense.original_currency ?? undefined,
         conversionFees: expense.conversion_fees ?? undefined,
         amountEur: expense.amount_eur,
-        expenseNumber: expense.expense_number ?? undefined,
+        expenseNumber: expense.expense_number as string[] | undefined,
         reimbursementStatus: expense.reimbursement_status as "pending" | "partial" | "complete",
         reimbursedAmount: expense.reimbursed_amount,
         isPersonal: expense.is_personal,
@@ -297,59 +300,7 @@ const Expenses = () => {
           if (error) throw error;
 
           // Auto-match reimbursements with expenses
-          let matchedCount = 0;
-          const { data: allExpenses } = await supabase
-            .from('expenses')
-            .select('*')
-            .order('date', { ascending: false });
-
-          if (allExpenses) {
-            const insertedReimbursements = await supabase
-              .from('reimbursements')
-              .select('*')
-              .order('created_at', { ascending: false })
-              .limit(reimbursements.length);
-
-            if (insertedReimbursements.data) {
-              for (const reimbursement of insertedReimbursements.data) {
-                // Find matching expense by amount, date (±5 days), and optionally expense_number
-                const matchingExpense = allExpenses.find((exp) => {
-                  const amountMatch = Math.abs(exp.amount_eur - reimbursement.amount_eur) < 0.01;
-                  
-                  const expDate = new Date(exp.date);
-                  const reimbDate = new Date(reimbursement.expense_date);
-                  const daysDiff = Math.abs((expDate.getTime() - reimbDate.getTime()) / (1000 * 60 * 60 * 24));
-                  const dateMatch = daysDiff <= 5;
-                  
-                  const expenseNumberMatch = !reimbursement.expense_number || 
-                    !exp.expense_number || 
-                    exp.expense_number === reimbursement.expense_number;
-                  
-                  return amountMatch && dateMatch && expenseNumberMatch;
-                });
-
-                if (matchingExpense) {
-                  // Update expense with reimbursement info
-                  await supabase
-                    .from('expenses')
-                    .update({
-                      reimbursed_amount: reimbursement.amount_eur,
-                      reimbursement_status: 'complete',
-                      expense_number: reimbursement.expense_number || matchingExpense.expense_number,
-                    })
-                    .eq('id', matchingExpense.id);
-
-                  // Update reimbursement with matched expense id
-                  await supabase
-                    .from('reimbursements')
-                    .update({ matched_expense_id: matchingExpense.id })
-                    .eq('id', reimbursement.id);
-
-                  matchedCount++;
-                }
-              }
-            }
-          }
+          const matchedCount = await matchReimbursementsWithExpenses(reimbursements.length);
 
           toast({
             title: 'Remboursements importés',
@@ -466,19 +417,182 @@ const Expenses = () => {
     }
   };
 
+  const matchReimbursementsWithExpenses = async (limitCount?: number) => {
+    const { data: allExpenses } = await supabase
+      .from('expenses')
+      .select('*')
+      .order('date', { ascending: false });
+
+    if (!allExpenses) return 0;
+
+    const reimbursementsQuery = supabase
+      .from('reimbursements')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (limitCount) {
+      reimbursementsQuery.limit(limitCount);
+    }
+
+    const { data: reimbursementsData } = await reimbursementsQuery;
+    if (!reimbursementsData) return 0;
+
+    let matchedCount = 0;
+
+    for (const reimbursement of reimbursementsData) {
+      // Skip if already matched
+      if (reimbursement.matched_expense_id) continue;
+
+      // Try single expense match first
+      const matchingExpense = allExpenses.find((exp) => {
+        const amountMatch = Math.abs(exp.amount_eur - reimbursement.amount_eur) < 0.01;
+        
+        const expDate = new Date(exp.date);
+        const reimbDate = new Date(reimbursement.expense_date);
+        const daysDiff = Math.abs((expDate.getTime() - reimbDate.getTime()) / (1000 * 60 * 60 * 24));
+        const dateMatch = daysDiff <= 5;
+        
+        const expenseNumberMatch = !reimbursement.expense_number || 
+          !exp.expense_number || 
+          (Array.isArray(exp.expense_number) 
+            ? exp.expense_number.includes(reimbursement.expense_number)
+            : exp.expense_number === reimbursement.expense_number);
+        
+        return amountMatch && dateMatch && expenseNumberMatch;
+      });
+
+      if (matchingExpense) {
+        const currentNumbers = Array.isArray(matchingExpense.expense_number) 
+          ? matchingExpense.expense_number 
+          : matchingExpense.expense_number 
+            ? [matchingExpense.expense_number] 
+            : [];
+        
+        const newNumbers = reimbursement.expense_number && !currentNumbers.includes(reimbursement.expense_number)
+          ? [...currentNumbers, reimbursement.expense_number]
+          : currentNumbers.length > 0 ? currentNumbers : null;
+
+        await supabase
+          .from('expenses')
+          .update({
+            reimbursed_amount: reimbursement.amount_eur,
+            reimbursement_status: 'complete',
+            expense_number: newNumbers,
+          })
+          .eq('id', matchingExpense.id);
+
+        await supabase
+          .from('reimbursements')
+          .update({ matched_expense_id: matchingExpense.id })
+          .eq('id', reimbursement.id);
+
+        matchedCount++;
+        continue;
+      }
+
+      // Try matching with 2 expenses
+      for (let i = 0; i < allExpenses.length; i++) {
+        for (let j = i + 1; j < allExpenses.length; j++) {
+          const exp1 = allExpenses[i];
+          const exp2 = allExpenses[j];
+          
+          const combinedAmount = exp1.amount_eur + exp2.amount_eur;
+          const amountMatch = Math.abs(combinedAmount - reimbursement.amount_eur) < 0.01;
+          
+          if (!amountMatch) continue;
+
+          const reimbDate = new Date(reimbursement.expense_date);
+          const exp1Date = new Date(exp1.date);
+          const exp2Date = new Date(exp2.date);
+          const daysDiff1 = Math.abs((exp1Date.getTime() - reimbDate.getTime()) / (1000 * 60 * 60 * 24));
+          const daysDiff2 = Math.abs((exp2Date.getTime() - reimbDate.getTime()) / (1000 * 60 * 60 * 24));
+          
+          if (daysDiff1 > 5 || daysDiff2 > 5) continue;
+
+          // Match found with 2 expenses
+          const exp1Numbers = Array.isArray(exp1.expense_number) ? exp1.expense_number : exp1.expense_number ? [exp1.expense_number] : [];
+          const exp2Numbers = Array.isArray(exp2.expense_number) ? exp2.expense_number : exp2.expense_number ? [exp2.expense_number] : [];
+          
+          const newNumbers1 = reimbursement.expense_number && !exp1Numbers.includes(reimbursement.expense_number)
+            ? [...exp1Numbers, reimbursement.expense_number]
+            : exp1Numbers.length > 0 ? exp1Numbers : null;
+          
+          const newNumbers2 = reimbursement.expense_number && !exp2Numbers.includes(reimbursement.expense_number)
+            ? [...exp2Numbers, reimbursement.expense_number]
+            : exp2Numbers.length > 0 ? exp2Numbers : null;
+
+          await supabase
+            .from('expenses')
+            .update({
+              reimbursed_amount: exp1.amount_eur,
+              reimbursement_status: 'partial',
+              expense_number: newNumbers1,
+            })
+            .eq('id', exp1.id);
+
+          await supabase
+            .from('expenses')
+            .update({
+              reimbursed_amount: exp2.amount_eur,
+              reimbursement_status: 'partial',
+              expense_number: newNumbers2,
+            })
+            .eq('id', exp2.id);
+
+          await supabase
+            .from('reimbursements')
+            .update({ matched_expense_id: exp1.id })
+            .eq('id', reimbursement.id);
+
+          matchedCount++;
+          break;
+        }
+      }
+    }
+
+    return matchedCount;
+  };
+
+  const handleRefreshMatching = async () => {
+    setRefreshing(true);
+    try {
+      const matchedCount = await matchReimbursementsWithExpenses();
+      
+      toast({
+        title: "Matching terminé",
+        description: `${matchedCount} remboursement(s) associé(s) aux dépenses`,
+      });
+
+      await loadExpenses();
+    } catch (error) {
+      console.error('Error refreshing matching:', error);
+      toast({
+        title: "Erreur",
+        description: "Impossible de rafraîchir les correspondances",
+        variant: "destructive",
+      });
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const filteredExpenses = expenses.filter((expense) => {
     const matchesSearch =
       expense.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      expense.expenseNumber?.toLowerCase().includes(searchQuery.toLowerCase());
+      expense.expenseNumber?.some(num => num.toLowerCase().includes(searchQuery.toLowerCase()));
     
     const expenseDate = new Date(expense.date);
     const matchesStartDate = !startDate || expenseDate >= new Date(startDate);
     const matchesEndDate = !endDate || expenseDate <= new Date(endDate);
 
     const matchesPersonal = showPersonal || !expense.isPersonal;
-    const matchesReimbursed = showReimbursed || expense.reimbursementStatus === "pending";
+    
+    const matchesStatus = 
+      (showPending && expense.reimbursementStatus === "pending") ||
+      (showPartial && expense.reimbursementStatus === "partial") ||
+      (showComplete && expense.reimbursementStatus === "complete");
 
-    return matchesSearch && matchesStartDate && matchesEndDate && matchesPersonal && matchesReimbursed;
+    return matchesSearch && matchesStartDate && matchesEndDate && matchesPersonal && matchesStatus;
   });
 
   const handleResetFilters = () => {
@@ -486,7 +600,9 @@ const Expenses = () => {
     setStartDate("");
     setEndDate("");
     setShowPersonal(false);
-    setShowReimbursed(false);
+    setShowPending(true);
+    setShowPartial(true);
+    setShowComplete(false);
   };
 
   if (loading) {
@@ -513,6 +629,14 @@ const Expenses = () => {
               Gérez vos dépenses professionnelles
             </p>
           </div>
+          <Button 
+            onClick={handleRefreshMatching} 
+            disabled={refreshing}
+            variant="outline"
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+            Rafraîchir les correspondances
+          </Button>
         </div>
 
         {uploading && (
@@ -540,9 +664,13 @@ const Expenses = () => {
               onStartDateChange={setStartDate}
               onEndDateChange={setEndDate}
               showPersonal={showPersonal}
-              showReimbursed={showReimbursed}
+              showPending={showPending}
+              showPartial={showPartial}
+              showComplete={showComplete}
               onShowPersonalChange={setShowPersonal}
-              onShowReimbursedChange={setShowReimbursed}
+              onShowPendingChange={setShowPending}
+              onShowPartialChange={setShowPartial}
+              onShowCompleteChange={setShowComplete}
               onReset={handleResetFilters}
             />
 
