@@ -512,6 +512,8 @@ const Expenses = () => {
 
       // Try single expense match
       const matchingExpense = allExpenses.find((exp) => {
+        if (exp.is_personal) return false;
+        
         const amountMatch = Math.abs(exp.amount_eur - totalAmount) < 0.01;
         const hasExpenseNumber = Array.isArray(exp.expense_number) 
           ? exp.expense_number.includes(expenseNumber)
@@ -542,6 +544,8 @@ const Expenses = () => {
 
       // Check for manual or explicit association: any expense with this number
       const expenseWithNumber = allExpenses.find((exp) => {
+        if (exp.is_personal) return false;
+        
         const hasThisNumber = Array.isArray(exp.expense_number)
           ? exp.expense_number.includes(expenseNumber)
           : exp.expense_number === expenseNumber;
@@ -580,6 +584,8 @@ const Expenses = () => {
       console.log(`[Auto-match] Checking reimbursement ${expenseNumber}, amount: ${totalAmount}, date: ${groupExpenseDate}`);
       
       const autoMatchExpense = allExpenses.find((exp) => {
+        if (exp.is_personal) return false;
+        
         // Check if expense is already matched to avoid double-matching
         const isAlreadyMatched = reimbursementsData.some(r => 
           r.matched_expense_id === exp.id
@@ -642,6 +648,8 @@ const Expenses = () => {
         const reimbDate = new Date(groupExpenseDate);
 
         const orangeExpense = allExpenses.find((exp) => {
+          if (exp.is_personal) return false;
+          
           const isOrange = exp.description?.toUpperCase().includes('PRLV SEPA ORANGE SA');
           if (!isOrange) return false;
 
@@ -689,6 +697,8 @@ const Expenses = () => {
       // Try matching by amount and payment date
       const groupPaymentDate = reimbursements[0].payment_date;
       const matchingExpenseByDate = allExpenses.find((exp) => {
+        if (exp.is_personal) return false;
+        
         const amountMatch = Math.abs(exp.amount_eur - totalAmount) < 0.01;
         
         const expDate = new Date(exp.date);
@@ -733,6 +743,8 @@ const Expenses = () => {
         for (let j = i + 1; j < allExpenses.length; j++) {
           const exp1 = allExpenses[i];
           const exp2 = allExpenses[j];
+          
+          if (exp1.is_personal || exp2.is_personal) continue;
           
           const combinedAmount = exp1.amount_eur + exp2.amount_eur;
           const amountMatch = Math.abs(combinedAmount - totalAmount) < 0.01;
@@ -785,6 +797,8 @@ const Expenses = () => {
 
       // Try single expense match first
       const matchingExpense = allExpenses.find((exp) => {
+        if (exp.is_personal) return false;
+        
         const amountMatch = Math.abs(exp.amount_eur - reimbursement.amount_eur) < 0.01;
         
         const expDate = new Date(exp.date);
@@ -830,6 +844,8 @@ const Expenses = () => {
         const reimbDate = new Date(reimbursement.expense_date);
 
         const orangeExpense = allExpenses.find((exp) => {
+          if (exp.is_personal) return false;
+          
           const isOrange = exp.description?.toUpperCase().includes('PRLV SEPA ORANGE SA');
           if (!isOrange) return false;
 
@@ -879,6 +895,8 @@ const Expenses = () => {
         for (let j = i + 1; j < allExpenses.length; j++) {
           const exp1 = allExpenses[i];
           const exp2 = allExpenses[j];
+          
+          if (exp1.is_personal || exp2.is_personal) continue;
           
           const combinedAmount = exp1.amount_eur + exp2.amount_eur;
           const amountMatch = Math.abs(combinedAmount - reimbursement.amount_eur) < 0.01;
