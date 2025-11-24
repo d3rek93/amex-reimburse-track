@@ -477,11 +477,11 @@ const Expenses = () => {
     // Process grouped reimbursements (with same expense_number)
     for (const [expenseNumber, reimbursements] of groupedReimbursements) {
       const totalAmount = reimbursements.reduce((sum, r) => sum + r.amount_eur, 0);
+      const isGsmGroup = reimbursements.every(r => r.category?.toLowerCase().includes('gsm'));
       const allMatched = reimbursements.every(r => r.matched_expense_id);
       
-      if (allMatched) continue;
-
-      const isGsmGroup = reimbursements.every(r => r.category?.toLowerCase().includes('gsm'));
+      // For non-GSM groups, skip if everything is already matched
+      if (allMatched && !isGsmGroup) continue;
 
       // Try single expense match based on explicit expense_number first
       const matchingExpense = allExpenses.find((exp) => {
