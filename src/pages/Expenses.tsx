@@ -481,7 +481,9 @@ const Expenses = () => {
       
       if (allMatched) continue;
 
-      // Try single expense match
+      const isGsmGroup = reimbursements.every(r => r.category?.toLowerCase().includes('gsm'));
+
+      // Try single expense match based on explicit expense_number first
       const matchingExpense = allExpenses.find((exp) => {
         const amountMatch = Math.abs(exp.amount_eur - totalAmount) < 0.01;
         const hasExpenseNumber = Array.isArray(exp.expense_number) 
@@ -509,6 +511,56 @@ const Expenses = () => {
 
         matchedCount += reimbursements.length;
         continue;
+      }
+
+      // Special case: GSM reimbursements matching Orange expenses by month + amount
+      if (isGsmGroup) {
+        const referenceReimbursement = reimbursements[0];
+        const reimbDate = new Date(referenceReimbursement.expense_date);
+
+        const orangeExpense = allExpenses.find((exp) => {
+          const isOrange = exp.description?.toUpperCase().includes('ORANGE');
+          if (!isOrange) return false;
+
+          const amountMatch = Math.abs(exp.amount_eur - totalAmount) < 0.01;
+          const expDate = new Date(exp.date);
+          const sameMonth = expDate.getMonth() === reimbDate.getMonth() &&
+                            expDate.getFullYear() === reimbDate.getFullYear();
+
+          return amountMatch && sameMonth;
+        });
+
+        if (orangeExpense) {
+          const currentNumbers = Array.isArray(orangeExpense.expense_number)
+            ? orangeExpense.expense_number
+            : orangeExpense.expense_number
+              ? [orangeExpense.expense_number]
+              : [];
+
+          const newNumbers = currentNumbers.includes(expenseNumber)
+            ? currentNumbers
+            : [...currentNumbers, expenseNumber];
+
+          for (const reimbursement of reimbursements) {
+            await supabase
+              .from('reimbursements')
+              .update({ matched_expense_id: orangeExpense.id })
+              .eq('id', reimbursement.id);
+          }
+
+          await supabase
+            .from('expenses')
+            .update({
+              reimbursed_amount: totalAmount,
+              reimbursement_status: 'complete',
+              expense_number: newNumbers,
+              source: 'Prélèvement',
+            })
+            .eq('id', orangeExpense.id);
+
+          matchedCount += reimbursements.length;
+          continue;
+        }
       }
 
       // Try matching with 2 expenses
