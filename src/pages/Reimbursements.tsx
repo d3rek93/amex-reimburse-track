@@ -62,6 +62,11 @@ interface AssociatedExpense {
   source: string;
 }
 
+interface GroupExpenseData {
+  expenses: AssociatedExpense[];
+  totalExpenseAmount: number;
+}
+
 const Reimbursements = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -73,6 +78,7 @@ const Reimbursements = () => {
   const [expandedReimbursements, setExpandedReimbursements] = useState<Set<string>>(new Set());
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [associatedExpenses, setAssociatedExpenses] = useState<Record<string, AssociatedExpense[]>>({});
+  const [groupExpenseData, setGroupExpenseData] = useState<Record<string, GroupExpenseData>>({});
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -106,6 +112,9 @@ const Reimbursements = () => {
       if (error) throw error;
 
       setReimbursements(data || []);
+      
+      // Load all expenses to calculate amount differences
+      await loadAllExpensesForGroups(data || []);
     } catch (error) {
       console.error('Error loading reimbursements:', error);
       toast({
@@ -115,6 +124,41 @@ const Reimbursements = () => {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadAllExpensesForGroups = async (reimbursementsList: Reimbursement[]) => {
+    try {
+      // Get all expenses
+      const { data: allExpenses, error } = await supabase
+        .from('expenses')
+        .select('*');
+
+      if (error) throw error;
+
+      // Group reimbursements by expense_number
+      const expenseNumbers = new Set(reimbursementsList.map(r => r.expense_number));
+      const groupData: Record<string, GroupExpenseData> = {};
+
+      // For each expense number, find matching expenses
+      expenseNumbers.forEach(expenseNumber => {
+        const matchingExpenses = (allExpenses || []).filter(exp => 
+          Array.isArray(exp.expense_number) 
+            ? exp.expense_number.includes(expenseNumber)
+            : exp.expense_number === expenseNumber
+        );
+
+        const totalExpenseAmount = matchingExpenses.reduce((sum, exp) => sum + exp.amount_eur, 0);
+
+        groupData[expenseNumber] = {
+          expenses: matchingExpenses,
+          totalExpenseAmount,
+        };
+      });
+
+      setGroupExpenseData(groupData);
+    } catch (error) {
+      console.error('Error loading expenses for groups:', error);
     }
   };
 
@@ -370,10 +414,20 @@ const Reimbursements = () => {
                   const isExpanded = expandedReimbursements.has(firstReimbursement.id);
                   const expenses = associatedExpenses[firstReimbursement.id] || [];
                   
+                  // Check for amount mismatch
+                  const groupData = groupExpenseData[group.expense_number];
+                  const hasAmountMismatch = groupData && 
+                    groupData.expenses.length > 0 && 
+                    Math.abs(groupData.totalExpenseAmount - group.total_amount) > 0.01;
+                  
+                  const rowClassName = hasMultiple 
+                    ? "font-semibold" + (hasAmountMismatch ? " bg-orange-50 dark:bg-orange-950/20 hover:bg-orange-100 dark:hover:bg-orange-950/30" : "")
+                    : (hasAmountMismatch ? "bg-orange-50 dark:bg-orange-950/20 hover:bg-orange-100 dark:hover:bg-orange-950/30" : "");
+                  
                   return (
                     <>
                       {/* Main group row */}
-                      <TableRow key={`group-${group.expense_number}`} className={hasMultiple ? "font-semibold" : ""}>
+                      <TableRow key={`group-${group.expense_number}`} className={rowClassName}>
                         <TableCell>
                           <div className="flex items-center gap-2">
                             {hasMultiple && (
@@ -396,7 +450,16 @@ const Reimbursements = () => {
                         </TableCell>
                         <TableCell className="font-mono text-sm">{group.expense_number}</TableCell>
                         <TableCell>{group.category}</TableCell>
-                        <TableCell className="text-right font-medium">{group.total_amount.toFixed(2)} €</TableCell>
+                        <TableCell className="text-right font-medium">
+                          <div className="flex items-center justify-end gap-2">
+                            <span>{group.total_amount.toFixed(2)} €</span>
+                            {hasAmountMismatch && groupData && (
+                              <Badge variant="outline" className="bg-orange-500 text-white border-orange-600">
+                                Δ {(group.total_amount - groupData.totalExpenseAmount).toFixed(2)} €
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
                         <TableCell>
                           {group.all_matched ? (
                             <Button 
