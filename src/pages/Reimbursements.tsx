@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Navigation } from "@/components/Navigation";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Trash2 } from "lucide-react";
+import { Loader2, Trash2, ChevronDown, ChevronRight } from "lucide-react";
 import { Session } from "@supabase/supabase-js";
 import {
   Table,
@@ -40,6 +40,17 @@ interface Reimbursement {
   matched_expense_id: string | null;
 }
 
+interface AssociatedExpense {
+  id: string;
+  date: string;
+  description: string;
+  amount_eur: number;
+  expense_number: string[] | null;
+  reimbursement_status: string;
+  reimbursed_amount: number;
+  source: string;
+}
+
 const Reimbursements = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -47,6 +58,8 @@ const Reimbursements = () => {
   const [reimbursements, setReimbursements] = useState<Reimbursement[]>([]);
   const [loading, setLoading] = useState(true);
   const [showMatched, setShowMatched] = useState(false);
+  const [expandedReimbursements, setExpandedReimbursements] = useState<Set<string>>(new Set());
+  const [associatedExpenses, setAssociatedExpenses] = useState<Record<string, AssociatedExpense[]>>({});
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -90,6 +103,44 @@ const Reimbursements = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadAssociatedExpenses = async (reimbursementId: string, matchedExpenseId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('expenses')
+        .select('*')
+        .eq('id', matchedExpenseId);
+
+      if (error) throw error;
+
+      setAssociatedExpenses(prev => ({
+        ...prev,
+        [reimbursementId]: data || []
+      }));
+    } catch (error) {
+      console.error('Error loading associated expenses:', error);
+      toast({
+        title: "Erreur",
+        description: "Impossible de charger les dépenses associées",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const toggleExpanded = async (reimbursement: Reimbursement) => {
+    const newExpanded = new Set(expandedReimbursements);
+    
+    if (newExpanded.has(reimbursement.id)) {
+      newExpanded.delete(reimbursement.id);
+    } else {
+      newExpanded.add(reimbursement.id);
+      if (reimbursement.matched_expense_id && !associatedExpenses[reimbursement.id]) {
+        await loadAssociatedExpenses(reimbursement.id, reimbursement.matched_expense_id);
+      }
+    }
+    
+    setExpandedReimbursements(newExpanded);
   };
 
   const handleDeleteReimbursement = async (id: string) => {
@@ -183,55 +234,94 @@ const Reimbursements = () => {
                   </TableCell>
                 </TableRow>
               ) : (
-                displayedReimbursements.map((reimbursement) => (
-                  <TableRow key={reimbursement.id}>
-                    <TableCell>{new Date(reimbursement.payment_date).toLocaleDateString('fr-FR')}</TableCell>
-                    <TableCell>{new Date(reimbursement.expense_date).toLocaleDateString('fr-FR')}</TableCell>
-                    <TableCell className="font-mono text-sm">{reimbursement.payment_reference}</TableCell>
-                    <TableCell className="font-mono text-sm">{reimbursement.expense_number}</TableCell>
-                    <TableCell>{reimbursement.category}</TableCell>
-                    <TableCell className="text-right font-medium">{reimbursement.amount_eur.toFixed(2)} €</TableCell>
-                     <TableCell>
-                       {reimbursement.matched_expense_id ? (
-                         <Button 
-                           variant="link" 
-                           className="p-0 h-auto"
-                           onClick={() => navigate(`/?expense=${reimbursement.matched_expense_id}`)}
-                         >
-                           <Badge variant="default" className="cursor-pointer">Associé</Badge>
-                         </Button>
-                       ) : (
-                         <Badge variant="destructive">Non associé</Badge>
-                       )}
-                     </TableCell>
-                    <TableCell className="text-right">
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button variant="ghost" size="sm">
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Confirmer la suppression</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Êtes-vous sûr de vouloir supprimer ce remboursement ? Cette action est irréversible.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Annuler</AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={() => handleDeleteReimbursement(reimbursement.id)}
-                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                displayedReimbursements.map((reimbursement) => {
+                  const isExpanded = expandedReimbursements.has(reimbursement.id);
+                  const expenses = associatedExpenses[reimbursement.id] || [];
+                  
+                  return (
+                    <>
+                      <TableRow key={reimbursement.id}>
+                        <TableCell>{new Date(reimbursement.payment_date).toLocaleDateString('fr-FR')}</TableCell>
+                        <TableCell>{new Date(reimbursement.expense_date).toLocaleDateString('fr-FR')}</TableCell>
+                        <TableCell className="font-mono text-sm">{reimbursement.payment_reference}</TableCell>
+                        <TableCell className="font-mono text-sm">{reimbursement.expense_number}</TableCell>
+                        <TableCell>{reimbursement.category}</TableCell>
+                        <TableCell className="text-right font-medium">{reimbursement.amount_eur.toFixed(2)} €</TableCell>
+                        <TableCell>
+                          {reimbursement.matched_expense_id ? (
+                            <Button 
+                              variant="link" 
+                              className="p-0 h-auto flex items-center gap-1"
+                              onClick={() => toggleExpanded(reimbursement)}
                             >
-                              Supprimer
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </TableCell>
-                  </TableRow>
-                ))
+                              {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                              <Badge variant="default" className="cursor-pointer">Associé</Badge>
+                            </Button>
+                          ) : (
+                            <Badge variant="destructive">Non associé</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="ghost" size="sm">
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Confirmer la suppression</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Êtes-vous sûr de vouloir supprimer ce remboursement ? Cette action est irréversible.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Annuler</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => handleDeleteReimbursement(reimbursement.id)}
+                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                >
+                                  Supprimer
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </TableCell>
+                      </TableRow>
+                      
+                      {isExpanded && expenses.map((expense) => (
+                        <TableRow key={`${reimbursement.id}-${expense.id}`} className="bg-muted/50">
+                          <TableCell colSpan={8} className="pl-12">
+                            <div className="flex items-center gap-4 text-sm">
+                              <div className="flex-1 grid grid-cols-6 gap-4">
+                                <div>
+                                  <span className="text-muted-foreground">Date:</span>
+                                  <span className="ml-2 font-medium">{new Date(expense.date).toLocaleDateString('fr-FR')}</span>
+                                </div>
+                                <div className="col-span-2">
+                                  <span className="text-muted-foreground">Description:</span>
+                                  <span className="ml-2">{expense.description}</span>
+                                </div>
+                                <div>
+                                  <span className="text-muted-foreground">Montant:</span>
+                                  <span className="ml-2 font-medium">{expense.amount_eur.toFixed(2)} €</span>
+                                </div>
+                                <div>
+                                  <span className="text-muted-foreground">Source:</span>
+                                  <Badge variant="secondary" className="ml-2">{expense.source}</Badge>
+                                </div>
+                                <div>
+                                  <span className="text-muted-foreground">N° note:</span>
+                                  <span className="ml-2 font-mono text-xs">{expense.expense_number?.join(', ') || '-'}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </>
+                  );
+                })
               )}
             </TableBody>
           </Table>
