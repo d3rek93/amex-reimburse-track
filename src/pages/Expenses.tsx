@@ -174,6 +174,9 @@ const Expenses = () => {
             
             if (isNaN(amount)) return null;
             
+            // Determine source based on description
+            const source = label.toUpperCase().includes('PRLV') ? 'Prélèvement' : 'Boursobank';
+            
             return {
               user_id: sessionData.session.user.id,
               date: dateOp,
@@ -182,7 +185,7 @@ const Expenses = () => {
               reimbursement_status: 'pending',
               reimbursed_amount: 0,
               is_personal: false,
-              source: 'Boursobank',
+              source: source,
             };
           }).filter(Boolean);
         } else {
@@ -203,6 +206,9 @@ const Expenses = () => {
             
             if (amountStr.startsWith('-')) return null;
             
+            // Determine source based on description
+            const source = description.toUpperCase().includes('PRLV') ? 'Prélèvement' : 'AMEX';
+            
             return {
               user_id: sessionData.session.user.id,
               date,
@@ -211,7 +217,7 @@ const Expenses = () => {
               reimbursement_status: 'pending',
               reimbursed_amount: 0,
               is_personal: false,
-              source: 'AMEX',
+              source: source,
             };
           }).filter(Boolean);
         }
@@ -553,6 +559,7 @@ const Expenses = () => {
               reimbursed_amount: totalAmount,
               reimbursement_status: 'complete',
               expense_number: newNumbers,
+              source: 'Prélèvement',
             })
             .eq('id', orangeExpense.id);
 
@@ -693,6 +700,7 @@ const Expenses = () => {
               reimbursed_amount: reimbursement.amount_eur,
               reimbursement_status: 'complete',
               expense_number: newNumbers,
+              source: 'Prélèvement',
             })
             .eq('id', orangeExpense.id);
 
