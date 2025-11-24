@@ -566,9 +566,8 @@ const Expenses = () => {
       // Skip if already matched
       if (reimbursement.matched_expense_id) continue;
 
-      // Check if it's a GSM/Orange operation
-      const isGsmOrange = reimbursement.category?.toLowerCase().includes('gsm') || 
-                          reimbursement.category?.toLowerCase().includes('orange');
+      // Check if it's a GSM reimbursement
+      const isGsmReimbursement = reimbursement.category?.toLowerCase().includes('gsm');
 
       // Try single expense match first
       const matchingExpense = allExpenses.find((exp) => {
@@ -577,9 +576,12 @@ const Expenses = () => {
         const expDate = new Date(exp.date);
         const reimbDate = new Date(reimbursement.expense_date);
         
+        // Check if expense is an Orange payment
+        const isOrangeExpense = exp.description?.toUpperCase().includes('ORANGE');
+        
         let dateMatch;
-        if (isGsmOrange) {
-          // For GSM/Orange, match on same month and year
+        if (isGsmReimbursement && isOrangeExpense) {
+          // For GSM reimbursements matching Orange expenses, use same month
           dateMatch = expDate.getMonth() === reimbDate.getMonth() && 
                      expDate.getFullYear() === reimbDate.getFullYear();
         } else {
@@ -602,14 +604,16 @@ const Expenses = () => {
           ? [...currentNumbers, reimbursement.expense_number]
           : currentNumbers.length > 0 ? currentNumbers : null;
 
+        const isOrangeExpense = matchingExpense.description?.toUpperCase().includes('ORANGE');
+        
         const updateData: any = {
           reimbursed_amount: reimbursement.amount_eur,
           reimbursement_status: 'complete',
           expense_number: newNumbers,
         };
 
-        // Tag GSM/Orange expenses as "Prélèvement"
-        if (isGsmOrange) {
+        // Tag Orange expenses as "Prélèvement" when matched with GSM reimbursement
+        if (isGsmReimbursement && isOrangeExpense) {
           updateData.source = 'Prélèvement';
         }
 
@@ -642,9 +646,12 @@ const Expenses = () => {
           const exp1Date = new Date(exp1.date);
           const exp2Date = new Date(exp2.date);
           
+          const isOrangeExpense1 = exp1.description?.toUpperCase().includes('ORANGE');
+          const isOrangeExpense2 = exp2.description?.toUpperCase().includes('ORANGE');
+          
           let dateMatch1, dateMatch2;
-          if (isGsmOrange) {
-            // For GSM/Orange, match on same month and year
+          if (isGsmReimbursement && (isOrangeExpense1 || isOrangeExpense2)) {
+            // For GSM reimbursements matching Orange expenses, use same month
             dateMatch1 = exp1Date.getMonth() === reimbDate.getMonth() && 
                         exp1Date.getFullYear() === reimbDate.getFullYear();
             dateMatch2 = exp2Date.getMonth() === reimbDate.getMonth() && 
@@ -683,9 +690,11 @@ const Expenses = () => {
             expense_number: newNumbers2,
           };
 
-          // Tag GSM/Orange expenses as "Prélèvement"
-          if (isGsmOrange) {
+          // Tag Orange expenses as "Prélèvement" when matched with GSM reimbursement
+          if (isGsmReimbursement && isOrangeExpense1) {
             updateData1.source = 'Prélèvement';
+          }
+          if (isGsmReimbursement && isOrangeExpense2) {
             updateData2.source = 'Prélèvement';
           }
 
