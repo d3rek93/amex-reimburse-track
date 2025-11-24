@@ -392,7 +392,35 @@ const Expenses = () => {
     try {
       const dbUpdates: any = {};
       
-      if (updates.expenseNumber !== undefined) dbUpdates.expense_number = updates.expenseNumber;
+      // Track if we're removing expense numbers to detach reimbursements
+      const expense = expenses.find(e => e.id === id);
+      const oldNumbers = expense?.expenseNumber || [];
+      
+      if (updates.expenseNumber !== undefined) {
+        dbUpdates.expense_number = updates.expenseNumber;
+        
+        // If numbers are being removed, detach the associated reimbursements
+        const newNumbers = updates.expenseNumber || [];
+        const removedNumbers = oldNumbers.filter(num => !newNumbers.includes(num));
+        
+        if (removedNumbers.length > 0) {
+          // Detach reimbursements with these expense numbers
+          for (const num of removedNumbers) {
+            await supabase
+              .from('reimbursements')
+              .update({ matched_expense_id: null })
+              .eq('expense_number', num)
+              .eq('matched_expense_id', id);
+          }
+          
+          // Reset expense status if no numbers left
+          if (newNumbers.length === 0) {
+            dbUpdates.reimbursement_status = 'pending';
+            dbUpdates.reimbursed_amount = 0;
+          }
+        }
+      }
+      
       if (updates.reimbursementStatus !== undefined) dbUpdates.reimbursement_status = updates.reimbursementStatus;
       if (updates.reimbursedAmount !== undefined) dbUpdates.reimbursed_amount = updates.reimbursedAmount;
       if (updates.isPersonal !== undefined) {
@@ -402,6 +430,17 @@ const Expenses = () => {
         dbUpdates.reimbursement_status = updates.isPersonal ? 'not_applicable' : 'pending';
         if (!updates.isPersonal) {
           dbUpdates.reimbursed_amount = 0;
+        }
+        
+        // Detach all reimbursements when marking as personal
+        if (updates.isPersonal && oldNumbers.length > 0) {
+          for (const num of oldNumbers) {
+            await supabase
+              .from('reimbursements')
+              .update({ matched_expense_id: null })
+              .eq('expense_number', num)
+              .eq('matched_expense_id', id);
+          }
         }
       }
       if (updates.consideredComplete !== undefined) dbUpdates.considered_complete = updates.consideredComplete;
