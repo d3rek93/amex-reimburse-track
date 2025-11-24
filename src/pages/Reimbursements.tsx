@@ -41,6 +41,16 @@ interface Reimbursement {
   matched_expense_id: string | null;
 }
 
+interface ReimbursementGroup {
+  expense_number: string;
+  reimbursements: Reimbursement[];
+  total_amount: number;
+  payment_date: string;
+  expense_date: string;
+  category: string;
+  all_matched: boolean;
+}
+
 interface AssociatedExpense {
   id: string;
   date: string;
@@ -61,6 +71,7 @@ const Reimbursements = () => {
   const [showMatched, setShowMatched] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedReimbursements, setExpandedReimbursements] = useState<Set<string>>(new Set());
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [associatedExpenses, setAssociatedExpenses] = useState<Record<string, AssociatedExpense[]>>({});
 
   useEffect(() => {
@@ -143,6 +154,16 @@ const Reimbursements = () => {
     }
     
     setExpandedReimbursements(newExpanded);
+  };
+
+  const toggleGroupExpanded = (expenseNumber: string) => {
+    const newExpanded = new Set(expandedGroups);
+    if (newExpanded.has(expenseNumber)) {
+      newExpanded.delete(expenseNumber);
+    } else {
+      newExpanded.add(expenseNumber);
+    }
+    setExpandedGroups(newExpanded);
   };
 
   const handleDeleteReimbursement = async (id: string) => {
@@ -243,7 +264,7 @@ const Reimbursements = () => {
     ? reimbursements 
     : unmatchedReimbursements;
 
-  const displayedReimbursements = baseDisplayedReimbursements.filter((reimbursement) => {
+  const filteredReimbursements = baseDisplayedReimbursements.filter((reimbursement) => {
     const matchesSearch =
       reimbursement.payment_reference.toLowerCase().includes(searchQuery.toLowerCase()) ||
       reimbursement.expense_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -251,6 +272,40 @@ const Reimbursements = () => {
     
     return matchesSearch;
   });
+
+  // Group reimbursements by expense_number
+  const groupedReimbursements = new Map<string, ReimbursementGroup>();
+  
+  filteredReimbursements.forEach((reimbursement) => {
+    const expenseNum = reimbursement.expense_number;
+    
+    if (!groupedReimbursements.has(expenseNum)) {
+      groupedReimbursements.set(expenseNum, {
+        expense_number: expenseNum,
+        reimbursements: [],
+        total_amount: 0,
+        payment_date: reimbursement.payment_date,
+        expense_date: reimbursement.expense_date,
+        category: reimbursement.category,
+        all_matched: true,
+      });
+    }
+    
+    const group = groupedReimbursements.get(expenseNum)!;
+    group.reimbursements.push(reimbursement);
+    group.total_amount += reimbursement.amount_eur;
+    
+    if (!reimbursement.matched_expense_id) {
+      group.all_matched = false;
+    }
+    
+    // Keep the most recent expense date
+    if (new Date(reimbursement.expense_date) > new Date(group.expense_date)) {
+      group.expense_date = reimbursement.expense_date;
+    }
+  });
+
+  const reimbursementGroups = Array.from(groupedReimbursements.values());
 
   return (
     <div className="min-h-screen bg-background">
@@ -301,32 +356,53 @@ const Reimbursements = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {displayedReimbursements.length === 0 ? (
+              {reimbursementGroups.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                     Aucun remboursement à afficher
                   </TableCell>
                 </TableRow>
               ) : (
-                displayedReimbursements.map((reimbursement) => {
-                  const isExpanded = expandedReimbursements.has(reimbursement.id);
-                  const expenses = associatedExpenses[reimbursement.id] || [];
+                reimbursementGroups.map((group) => {
+                  const isGroupExpanded = expandedGroups.has(group.expense_number);
+                  const hasMultiple = group.reimbursements.length > 1;
+                  const firstReimbursement = group.reimbursements[0];
+                  const isExpanded = expandedReimbursements.has(firstReimbursement.id);
+                  const expenses = associatedExpenses[firstReimbursement.id] || [];
                   
                   return (
                     <>
-                      <TableRow key={reimbursement.id}>
-                        <TableCell>{new Date(reimbursement.payment_date).toLocaleDateString('fr-FR')}</TableCell>
-                        <TableCell>{new Date(reimbursement.expense_date).toLocaleDateString('fr-FR')}</TableCell>
-                        <TableCell className="font-mono text-sm">{reimbursement.payment_reference}</TableCell>
-                        <TableCell className="font-mono text-sm">{reimbursement.expense_number}</TableCell>
-                        <TableCell>{reimbursement.category}</TableCell>
-                        <TableCell className="text-right font-medium">{reimbursement.amount_eur.toFixed(2)} €</TableCell>
+                      {/* Main group row */}
+                      <TableRow key={`group-${group.expense_number}`} className={hasMultiple ? "font-semibold" : ""}>
                         <TableCell>
-                          {reimbursement.matched_expense_id ? (
+                          <div className="flex items-center gap-2">
+                            {hasMultiple && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0"
+                                onClick={() => toggleGroupExpanded(group.expense_number)}
+                              >
+                                {isGroupExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                              </Button>
+                            )}
+                            {new Date(group.payment_date).toLocaleDateString('fr-FR')}
+                            {hasMultiple && <Badge variant="secondary" className="ml-2">{group.reimbursements.length} paiements</Badge>}
+                          </div>
+                        </TableCell>
+                        <TableCell>{new Date(group.expense_date).toLocaleDateString('fr-FR')}</TableCell>
+                        <TableCell className="font-mono text-sm">
+                          {hasMultiple ? "Multiple" : firstReimbursement.payment_reference}
+                        </TableCell>
+                        <TableCell className="font-mono text-sm">{group.expense_number}</TableCell>
+                        <TableCell>{group.category}</TableCell>
+                        <TableCell className="text-right font-medium">{group.total_amount.toFixed(2)} €</TableCell>
+                        <TableCell>
+                          {group.all_matched ? (
                             <Button 
                               variant="link" 
                               className="p-0 h-auto flex items-center gap-1"
-                              onClick={() => toggleExpanded(reimbursement)}
+                              onClick={() => toggleExpanded(firstReimbursement)}
                             >
                               {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                               <Badge variant="default" className="cursor-pointer">Associé</Badge>
@@ -337,7 +413,7 @@ const Reimbursements = () => {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-2">
-                            {reimbursement.matched_expense_id && (
+                            {!hasMultiple && firstReimbursement.matched_expense_id && (
                               <AlertDialog>
                                 <AlertDialogTrigger asChild>
                                   <Button variant="outline" size="sm">
@@ -355,7 +431,7 @@ const Reimbursements = () => {
                                   <AlertDialogFooter>
                                     <AlertDialogCancel>Annuler</AlertDialogCancel>
                                     <AlertDialogAction
-                                      onClick={() => handleUnmatchReimbursement(reimbursement)}
+                                      onClick={() => handleUnmatchReimbursement(firstReimbursement)}
                                     >
                                       Confirmer
                                     </AlertDialogAction>
@@ -363,36 +439,122 @@ const Reimbursements = () => {
                                 </AlertDialogContent>
                               </AlertDialog>
                             )}
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button variant="ghost" size="sm">
-                                  <Trash2 className="h-4 w-4 text-destructive" />
-                                </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>Confirmer la suppression</AlertDialogTitle>
-                                  <AlertDialogDescription>
-                                    Êtes-vous sûr de vouloir supprimer ce remboursement ? Cette action est irréversible.
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>Annuler</AlertDialogCancel>
-                                  <AlertDialogAction
-                                    onClick={() => handleDeleteReimbursement(reimbursement.id)}
-                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                  >
-                                    Supprimer
-                                  </AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
+                            {!hasMultiple && (
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button variant="ghost" size="sm">
+                                    <Trash2 className="h-4 w-4 text-destructive" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Confirmer la suppression</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      Êtes-vous sûr de vouloir supprimer ce remboursement ? Cette action est irréversible.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Annuler</AlertDialogCancel>
+                                    <AlertDialogAction
+                                      onClick={() => handleDeleteReimbursement(firstReimbursement.id)}
+                                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                    >
+                                      Supprimer
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
                       
+                      {/* Individual reimbursement details (when group is expanded) */}
+                      {hasMultiple && isGroupExpanded && group.reimbursements.map((reimbursement, index) => (
+                        <TableRow key={reimbursement.id} className="bg-muted/30">
+                          <TableCell className="pl-12 text-sm">
+                            {new Date(reimbursement.payment_date).toLocaleDateString('fr-FR')}
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            {new Date(reimbursement.expense_date).toLocaleDateString('fr-FR')}
+                          </TableCell>
+                          <TableCell className="font-mono text-xs">
+                            {reimbursement.payment_reference}
+                          </TableCell>
+                          <TableCell className="font-mono text-xs text-muted-foreground">
+                            #{index + 1}
+                          </TableCell>
+                          <TableCell className="text-sm">{reimbursement.category}</TableCell>
+                          <TableCell className="text-right text-sm">
+                            {reimbursement.amount_eur.toFixed(2)} €
+                          </TableCell>
+                          <TableCell>
+                            {reimbursement.matched_expense_id ? (
+                              <Badge variant="outline" className="text-xs">Associé</Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-xs text-destructive">Non associé</Badge>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              {reimbursement.matched_expense_id && (
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button variant="outline" size="sm">
+                                      <Unlink2 className="h-4 w-4 mr-1" />
+                                      Dissocier
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Retirer l'association</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        Ce remboursement sera repassé en non associé et la dépense liée redeviendra non remboursée sans numéro de note de frais.
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Annuler</AlertDialogCancel>
+                                      <AlertDialogAction
+                                        onClick={() => handleUnmatchReimbursement(reimbursement)}
+                                      >
+                                        Confirmer
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              )}
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button variant="ghost" size="sm">
+                                    <Trash2 className="h-4 w-4 text-destructive" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Confirmer la suppression</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      Êtes-vous sûr de vouloir supprimer ce remboursement ? Cette action est irréversible.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Annuler</AlertDialogCancel>
+                                    <AlertDialogAction
+                                      onClick={() => handleDeleteReimbursement(reimbursement.id)}
+                                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                    >
+                                      Supprimer
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+
+                      {/* Associated expense details */}
                       {isExpanded && expenses.map((expense) => (
-                        <TableRow key={`${reimbursement.id}-${expense.id}`} className="bg-muted/50">
+                        <TableRow key={`${firstReimbursement.id}-${expense.id}`} className="bg-muted/50">
                           <TableCell colSpan={8} className="pl-12">
                             <div className="flex items-center gap-4 text-sm">
                               <div className="flex-1 grid grid-cols-6 gap-4">
@@ -410,7 +572,7 @@ const Reimbursements = () => {
                                 </div>
                                 <div>
                                   <span className="text-muted-foreground">Source:</span>
-                                  <Badge variant="secondary" className="ml-2">{expense.source}</Badge>
+                                  <Badge className="ml-2" variant="secondary">{expense.source}</Badge>
                                 </div>
                                 <div>
                                   <span className="text-muted-foreground">N° note:</span>
