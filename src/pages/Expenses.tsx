@@ -90,7 +90,7 @@ const Expenses = () => {
         conversionFees: expense.conversion_fees ?? undefined,
         amountEur: expense.amount_eur,
         expenseNumber: expense.expense_number as string[] | undefined,
-        reimbursementStatus: expense.reimbursement_status as "pending" | "partial" | "complete",
+        reimbursementStatus: expense.reimbursement_status as "pending" | "partial" | "complete" | "not_applicable",
         reimbursedAmount: expense.reimbursed_amount,
         isPersonal: expense.is_personal,
         source: (expense.source as "AMEX" | "Boursobank" | "Manuel") || "AMEX",
@@ -395,7 +395,15 @@ const Expenses = () => {
       if (updates.expenseNumber !== undefined) dbUpdates.expense_number = updates.expenseNumber;
       if (updates.reimbursementStatus !== undefined) dbUpdates.reimbursement_status = updates.reimbursementStatus;
       if (updates.reimbursedAmount !== undefined) dbUpdates.reimbursed_amount = updates.reimbursedAmount;
-      if (updates.isPersonal !== undefined) dbUpdates.is_personal = updates.isPersonal;
+      if (updates.isPersonal !== undefined) {
+        dbUpdates.is_personal = updates.isPersonal;
+        // When marking as personal, change status to "not_applicable"
+        // When unmarking as personal, reset to "pending"
+        dbUpdates.reimbursement_status = updates.isPersonal ? 'not_applicable' : 'pending';
+        if (!updates.isPersonal) {
+          dbUpdates.reimbursed_amount = 0;
+        }
+      }
       if (updates.consideredComplete !== undefined) dbUpdates.considered_complete = updates.consideredComplete;
 
       const { error } = await supabase
@@ -406,7 +414,20 @@ const Expenses = () => {
       if (error) throw error;
 
       setExpenses((prev) =>
-        prev.map((expense) => (expense.id === id ? { ...expense, ...updates } : expense))
+        prev.map((expense) => {
+          if (expense.id === id) {
+            const updatedExpense = { ...expense, ...updates };
+            // Apply automatic status change for personal expenses
+            if (updates.isPersonal !== undefined) {
+              updatedExpense.reimbursementStatus = updates.isPersonal ? 'not_applicable' : 'pending';
+              if (!updates.isPersonal) {
+                updatedExpense.reimbursedAmount = 0;
+              }
+            }
+            return updatedExpense;
+          }
+          return expense;
+        })
       );
     } catch (error) {
       console.error('Error updating expense:', error);
