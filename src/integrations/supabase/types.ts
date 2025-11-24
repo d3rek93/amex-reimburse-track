@@ -17,6 +17,7 @@ export type Database = {
       expenses: {
         Row: {
           amount_eur: number
+          considered_complete: boolean
           conversion_fees: number | null
           created_at: string
           date: string
@@ -34,6 +35,7 @@ export type Database = {
         }
         Insert: {
           amount_eur: number
+          considered_complete?: boolean
           conversion_fees?: number | null
           created_at?: string
           date: string
@@ -51,6 +53,7 @@ export type Database = {
         }
         Update: {
           amount_eur?: number
+          considered_complete?: boolean
           conversion_fees?: number | null
           created_at?: string
           date?: string

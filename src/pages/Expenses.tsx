@@ -35,6 +35,20 @@ const Expenses = () => {
   const [uploading, setUploading] = useState(false);
   const [showUploadDialog, setShowUploadDialog] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [highlightedExpenseId, setHighlightedExpenseId] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Check for expense parameter in URL
+    const params = new URLSearchParams(window.location.search);
+    const expenseId = params.get('expense');
+    if (expenseId) {
+      setHighlightedExpenseId(expenseId);
+      // Clear URL parameter
+      window.history.replaceState({}, '', window.location.pathname);
+      // Clear highlight after 3 seconds
+      setTimeout(() => setHighlightedExpenseId(null), 3000);
+    }
+  }, []);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -80,6 +94,7 @@ const Expenses = () => {
         reimbursedAmount: expense.reimbursed_amount,
         isPersonal: expense.is_personal,
         source: (expense.source as "AMEX" | "Boursobank" | "Manuel") || "AMEX",
+        consideredComplete: expense.considered_complete ?? false,
       }));
 
       setExpenses(formattedExpenses);
@@ -149,7 +164,11 @@ const Expenses = () => {
             const amountStr = columns[6];
             const accountLabel = columns[9];
             
-            if (accountLabel !== 'VISA ULTIM' || !label.startsWith('CARTE')) return null;
+            // Include VISA ULTIM CARTE transactions and any transaction with "orange" in label
+            const isVisaUltim = accountLabel === 'VISA ULTIM' && label.startsWith('CARTE');
+            const isOrange = label.toLowerCase().includes('orange');
+            
+            if (!isVisaUltim && !isOrange) return null;
             
             const amount = Math.abs(parseFloat(amountStr.replace(',', '.')));
             
@@ -371,6 +390,7 @@ const Expenses = () => {
       if (updates.reimbursementStatus !== undefined) dbUpdates.reimbursement_status = updates.reimbursementStatus;
       if (updates.reimbursedAmount !== undefined) dbUpdates.reimbursed_amount = updates.reimbursedAmount;
       if (updates.isPersonal !== undefined) dbUpdates.is_personal = updates.isPersonal;
+      if (updates.consideredComplete !== undefined) dbUpdates.considered_complete = updates.consideredComplete;
 
       const { error } = await supabase
         .from('expenses')
@@ -437,9 +457,112 @@ const Expenses = () => {
     const { data: reimbursementsData } = await reimbursementsQuery;
     if (!reimbursementsData) return 0;
 
-    let matchedCount = 0;
+    // Group reimbursements by expense_number and sum amounts
+    const groupedReimbursements = new Map<string, typeof reimbursementsData>();
+    const ungroupedReimbursements: typeof reimbursementsData = [];
 
     for (const reimbursement of reimbursementsData) {
+      if (reimbursement.expense_number) {
+        if (!groupedReimbursements.has(reimbursement.expense_number)) {
+          groupedReimbursements.set(reimbursement.expense_number, []);
+        }
+        groupedReimbursements.get(reimbursement.expense_number)!.push(reimbursement);
+      } else {
+        ungroupedReimbursements.push(reimbursement);
+      }
+    }
+
+    let matchedCount = 0;
+
+    // Process grouped reimbursements (with same expense_number)
+    for (const [expenseNumber, reimbursements] of groupedReimbursements) {
+      const totalAmount = reimbursements.reduce((sum, r) => sum + r.amount_eur, 0);
+      const allMatched = reimbursements.every(r => r.matched_expense_id);
+      
+      if (allMatched) continue;
+
+      // Try single expense match
+      const matchingExpense = allExpenses.find((exp) => {
+        const amountMatch = Math.abs(exp.amount_eur - totalAmount) < 0.01;
+        const hasExpenseNumber = Array.isArray(exp.expense_number) 
+          ? exp.expense_number.includes(expenseNumber)
+          : exp.expense_number === expenseNumber;
+        
+        return amountMatch && hasExpenseNumber;
+      });
+
+      if (matchingExpense) {
+        for (const reimbursement of reimbursements) {
+          await supabase
+            .from('reimbursements')
+            .update({ matched_expense_id: matchingExpense.id })
+            .eq('id', reimbursement.id);
+        }
+
+        await supabase
+          .from('expenses')
+          .update({
+            reimbursed_amount: totalAmount,
+            reimbursement_status: 'complete',
+          })
+          .eq('id', matchingExpense.id);
+
+        matchedCount += reimbursements.length;
+        continue;
+      }
+
+      // Try matching with 2 expenses
+      for (let i = 0; i < allExpenses.length; i++) {
+        for (let j = i + 1; j < allExpenses.length; j++) {
+          const exp1 = allExpenses[i];
+          const exp2 = allExpenses[j];
+          
+          const combinedAmount = exp1.amount_eur + exp2.amount_eur;
+          const amountMatch = Math.abs(combinedAmount - totalAmount) < 0.01;
+          
+          if (!amountMatch) continue;
+
+          const exp1HasNumber = Array.isArray(exp1.expense_number) 
+            ? exp1.expense_number.includes(expenseNumber)
+            : exp1.expense_number === expenseNumber;
+          const exp2HasNumber = Array.isArray(exp2.expense_number) 
+            ? exp2.expense_number.includes(expenseNumber)
+            : exp2.expense_number === expenseNumber;
+
+          if (!exp1HasNumber || !exp2HasNumber) continue;
+
+          // Match found with 2 expenses
+          for (const reimbursement of reimbursements) {
+            await supabase
+              .from('reimbursements')
+              .update({ matched_expense_id: exp1.id })
+              .eq('id', reimbursement.id);
+          }
+
+          await supabase
+            .from('expenses')
+            .update({
+              reimbursed_amount: exp1.amount_eur,
+              reimbursement_status: 'complete',
+            })
+            .eq('id', exp1.id);
+
+          await supabase
+            .from('expenses')
+            .update({
+              reimbursed_amount: exp2.amount_eur,
+              reimbursement_status: 'complete',
+            })
+            .eq('id', exp2.id);
+
+          matchedCount += reimbursements.length;
+          break;
+        }
+      }
+    }
+
+    // Process individual reimbursements (without expense_number or not grouped)
+    for (const reimbursement of ungroupedReimbursements) {
       // Skip if already matched
       if (reimbursement.matched_expense_id) continue;
 
@@ -452,13 +575,7 @@ const Expenses = () => {
         const daysDiff = Math.abs((expDate.getTime() - reimbDate.getTime()) / (1000 * 60 * 60 * 24));
         const dateMatch = daysDiff <= 5;
         
-        const expenseNumberMatch = !reimbursement.expense_number || 
-          !exp.expense_number || 
-          (Array.isArray(exp.expense_number) 
-            ? exp.expense_number.includes(reimbursement.expense_number)
-            : exp.expense_number === reimbursement.expense_number);
-        
-        return amountMatch && dateMatch && expenseNumberMatch;
+        return amountMatch && dateMatch;
       });
 
       if (matchingExpense) {
@@ -546,6 +663,32 @@ const Expenses = () => {
 
           matchedCount++;
           break;
+        }
+      }
+    }
+
+    // Check expenses with expense_numbers and mark reimbursements as matched
+    for (const expense of allExpenses) {
+      if (!expense.expense_number || !Array.isArray(expense.expense_number)) continue;
+
+      for (const expNum of expense.expense_number) {
+        const relatedReimbursements = reimbursementsData.filter(
+          r => r.expense_number === expNum && !r.matched_expense_id
+        );
+
+        if (relatedReimbursements.length === 0) continue;
+
+        const totalReimbursed = relatedReimbursements.reduce((sum, r) => sum + r.amount_eur, 0);
+
+        // If 100% of expense is covered by reimbursements, mark them as matched
+        if (Math.abs(totalReimbursed - expense.amount_eur) < 0.01) {
+          for (const reimbursement of relatedReimbursements) {
+            await supabase
+              .from('reimbursements')
+              .update({ matched_expense_id: expense.id })
+              .eq('id', reimbursement.id);
+            matchedCount++;
+          }
         }
       }
     }
@@ -678,6 +821,7 @@ const Expenses = () => {
               expenses={filteredExpenses}
               onUpdateExpense={handleUpdateExpense}
               onDeleteExpense={handleDeleteExpense}
+              highlightedExpenseId={highlightedExpenseId}
             />
           </>
         )}
