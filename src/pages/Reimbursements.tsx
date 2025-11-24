@@ -73,7 +73,9 @@ const Reimbursements = () => {
   const [session, setSession] = useState<Session | null>(null);
   const [reimbursements, setReimbursements] = useState<Reimbursement[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showUnmatched, setShowUnmatched] = useState(true);
   const [showMatched, setShowMatched] = useState(false);
+  const [showWithDiscrepancy, setShowWithDiscrepancy] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedReimbursements, setExpandedReimbursements] = useState<Set<string>>(new Set());
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
@@ -312,11 +314,40 @@ const Reimbursements = () => {
   const matchedReimbursements = reimbursements.filter(r => r.matched_expense_id);
   const unmatchedReimbursements = reimbursements.filter(r => !r.matched_expense_id);
   
-  const baseDisplayedReimbursements = showMatched 
-    ? reimbursements 
-    : unmatchedReimbursements;
+  // Group all reimbursements to calculate discrepancies
+  const tempGrouped = new Map<string, number>();
+  reimbursements.forEach(r => {
+    const current = tempGrouped.get(r.expense_number) || 0;
+    tempGrouped.set(r.expense_number, current + r.amount_eur);
+  });
+  
+  // Calculate reimbursements with discrepancies (by expense_number group)
+  const expenseNumbersWithDiscrepancy = new Set<string>();
+  tempGrouped.forEach((totalReimbursement, expenseNumber) => {
+    const groupData = groupExpenseData[expenseNumber];
+    if (groupData && groupData.expenses.length > 0) {
+      const hasDiscrepancy = Math.abs(groupData.totalExpenseAmount - totalReimbursement) > 0.01;
+      if (hasDiscrepancy) {
+        expenseNumbersWithDiscrepancy.add(expenseNumber);
+      }
+    }
+  });
+  
+  const reimbursementsWithDiscrepancy = reimbursements.filter(r => 
+    expenseNumbersWithDiscrepancy.has(r.expense_number)
+  );
 
-  const filteredReimbursements = baseDisplayedReimbursements.filter((reimbursement) => {
+  const filteredReimbursements = reimbursements.filter((reimbursement) => {
+    // Apply status filters
+    const isMatched = !!reimbursement.matched_expense_id;
+    const hasDiscrepancy = expenseNumbersWithDiscrepancy.has(reimbursement.expense_number);
+    
+    const statusMatch = 
+      (showUnmatched && !isMatched) ||
+      (showMatched && isMatched) ||
+      (showWithDiscrepancy && hasDiscrepancy);
+    
+    if (!statusMatch) return false;
     const matchesSearch =
       reimbursement.payment_reference.toLowerCase().includes(searchQuery.toLowerCase()) ||
       reimbursement.expense_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -371,25 +402,52 @@ const Reimbursements = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-6 bg-card p-4 rounded-lg border">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Rechercher par référence, n° note ou catégorie..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
-            />
+        <div className="space-y-4">
+          <div className="flex items-center gap-6 bg-card p-4 rounded-lg border">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Rechercher par référence, n° note ou catégorie..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10"
+              />
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Checkbox
-              id="show-matched"
-              checked={showMatched}
-              onCheckedChange={(checked) => setShowMatched(checked as boolean)}
-            />
-            <Label htmlFor="show-matched" className="cursor-pointer text-sm whitespace-nowrap">
-              Afficher les remboursements associés
-            </Label>
+          
+          <div className="flex items-center gap-6 bg-card p-4 rounded-lg border">
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="show-unmatched"
+                checked={showUnmatched}
+                onCheckedChange={(checked) => setShowUnmatched(checked as boolean)}
+              />
+              <Label htmlFor="show-unmatched" className="cursor-pointer text-sm whitespace-nowrap">
+                Non associés ({unmatchedReimbursements.length})
+              </Label>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="show-matched"
+                checked={showMatched}
+                onCheckedChange={(checked) => setShowMatched(checked as boolean)}
+              />
+              <Label htmlFor="show-matched" className="cursor-pointer text-sm whitespace-nowrap">
+                Associés ({matchedReimbursements.length})
+              </Label>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="show-discrepancy"
+                checked={showWithDiscrepancy}
+                onCheckedChange={(checked) => setShowWithDiscrepancy(checked as boolean)}
+              />
+              <Label htmlFor="show-discrepancy" className="cursor-pointer text-sm whitespace-nowrap">
+                Avec écart ({reimbursementsWithDiscrepancy.length})
+              </Label>
+            </div>
           </div>
         </div>
 
