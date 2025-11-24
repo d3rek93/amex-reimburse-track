@@ -21,15 +21,17 @@ export interface Expense {
   reimbursedAmount: number;
   isPersonal: boolean;
   source: "AMEX" | "Boursobank" | "Manuel";
+  consideredComplete?: boolean;
 }
 
 interface ExpenseTableProps {
   expenses: Expense[];
   onUpdateExpense: (id: string, updates: Partial<Expense>) => void;
   onDeleteExpense?: (id: string) => void;
+  highlightedExpenseId?: string | null;
 }
 
-export const ExpenseTable = ({ expenses, onUpdateExpense, onDeleteExpense }: ExpenseTableProps) => {
+export const ExpenseTable = ({ expenses, onUpdateExpense, onDeleteExpense, highlightedExpenseId }: ExpenseTableProps) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [partialAmounts, setPartialAmounts] = useState<Record<string, number>>({});
@@ -104,12 +106,19 @@ export const ExpenseTable = ({ expenses, onUpdateExpense, onDeleteExpense }: Exp
             <TableHead>N° Note de frais</TableHead>
             <TableHead>Remboursement</TableHead>
             <TableHead>Montant</TableHead>
+            <TableHead>Max remb.</TableHead>
             {onDeleteExpense && <TableHead className="w-20">Actions</TableHead>}
           </TableRow>
         </TableHeader>
         <TableBody>
           {expenses.map((expense) => (
-            <TableRow key={expense.id} className={expense.isPersonal ? "opacity-50" : ""}>
+            <TableRow 
+              key={expense.id} 
+              className={`
+                ${expense.isPersonal ? "opacity-50" : ""} 
+                ${highlightedExpenseId === expense.id ? "bg-primary/10 animate-pulse" : ""}
+              `}
+            >
               <TableCell>
                 <Checkbox
                   checked={expense.isPersonal}
@@ -198,6 +207,17 @@ export const ExpenseTable = ({ expenses, onUpdateExpense, onDeleteExpense }: Exp
                   <span className="text-muted-foreground">{expense.amountEur.toFixed(2)} €</span>
                 ) : (
                   <span className="text-muted-foreground">-</span>
+                )}
+              </TableCell>
+              <TableCell>
+                {expense.reimbursementStatus === "partial" && (
+                  <Checkbox
+                    checked={expense.consideredComplete || false}
+                    onCheckedChange={(checked) =>
+                      onUpdateExpense(expense.id, { consideredComplete: checked as boolean })
+                    }
+                    title="Remboursement maximum atteint"
+                  />
                 )}
               </TableCell>
               {onDeleteExpense && (

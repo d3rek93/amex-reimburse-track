@@ -191,13 +191,19 @@ const Reimbursements = () => {
                     <TableCell className="font-mono text-sm">{reimbursement.expense_number}</TableCell>
                     <TableCell>{reimbursement.category}</TableCell>
                     <TableCell className="text-right font-medium">{reimbursement.amount_eur.toFixed(2)} €</TableCell>
-                    <TableCell>
-                      {reimbursement.matched_expense_id ? (
-                        <Badge variant="default">Associé</Badge>
-                      ) : (
-                        <Badge variant="destructive">Non associé</Badge>
-                      )}
-                    </TableCell>
+                     <TableCell>
+                       {reimbursement.matched_expense_id ? (
+                         <Button 
+                           variant="link" 
+                           className="p-0 h-auto"
+                           onClick={() => navigate(`/?expense=${reimbursement.matched_expense_id}`)}
+                         >
+                           <Badge variant="default" className="cursor-pointer">Associé</Badge>
+                         </Button>
+                       ) : (
+                         <Badge variant="destructive">Non associé</Badge>
+                       )}
+                     </TableCell>
                     <TableCell className="text-right">
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
