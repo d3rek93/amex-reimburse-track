@@ -522,13 +522,22 @@ const Expenses = () => {
         continue;
       }
 
-      // Check for manual association: expense with this number marked as complete
+      // Check for manual association: any expense with this number that has been marked as not "en attente"
       const manuallyMatchedExpense = allExpenses.find((exp) => {
         const hasThisNumber = Array.isArray(exp.expense_number)
           ? exp.expense_number.includes(expenseNumber)
           : exp.expense_number === expenseNumber;
         
-        return hasThisNumber && exp.considered_complete;
+        // On considère comme association manuelle si :
+        // - la dépense est marquée comme complétée, OU
+        // - le statut de remboursement n'est plus "pending" (ex: partiel), OU
+        // - un montant remboursé a déjà été saisi
+        const manuallyHandled =
+          exp.considered_complete ||
+          exp.reimbursement_status !== 'pending' ||
+          (exp.reimbursed_amount ?? 0) > 0;
+        
+        return hasThisNumber && manuallyHandled;
       });
 
       if (manuallyMatchedExpense) {
