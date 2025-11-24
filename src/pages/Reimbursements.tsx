@@ -39,6 +39,7 @@ interface Reimbursement {
   category: string;
   amount_eur: number;
   matched_expense_id: string | null;
+  status: string;
 }
 
 interface ReimbursementGroup {
@@ -76,6 +77,7 @@ const Reimbursements = () => {
   const [showUnmatched, setShowUnmatched] = useState(true);
   const [showMatched, setShowMatched] = useState(false);
   const [showWithDiscrepancy, setShowWithDiscrepancy] = useState(false);
+  const [showCancelled, setShowCancelled] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedReimbursements, setExpandedReimbursements] = useState<Set<string>>(new Set());
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
@@ -311,8 +313,9 @@ const Reimbursements = () => {
     return null;
   }
 
-  const matchedReimbursements = reimbursements.filter(r => r.matched_expense_id);
-  const unmatchedReimbursements = reimbursements.filter(r => !r.matched_expense_id);
+  const matchedReimbursements = reimbursements.filter(r => r.matched_expense_id && r.status !== 'cancelled');
+  const unmatchedReimbursements = reimbursements.filter(r => !r.matched_expense_id && r.status !== 'cancelled');
+  const cancelledReimbursements = reimbursements.filter(r => r.status === 'cancelled');
   
   // Group all reimbursements to calculate discrepancies
   const tempGrouped = new Map<string, number>();
@@ -339,13 +342,16 @@ const Reimbursements = () => {
 
   const filteredReimbursements = reimbursements.filter((reimbursement) => {
     // Apply status filters
-    const isMatched = !!reimbursement.matched_expense_id;
+    const isMatched = !!reimbursement.matched_expense_id && reimbursement.status !== 'cancelled';
+    const isCancelled = reimbursement.status === 'cancelled';
+    const isUnmatched = !reimbursement.matched_expense_id && reimbursement.status !== 'cancelled';
     const hasDiscrepancy = expenseNumbersWithDiscrepancy.has(reimbursement.expense_number);
     
     const statusMatch = 
-      (showUnmatched && !isMatched) ||
+      (showUnmatched && isUnmatched) ||
       (showMatched && isMatched) ||
-      (showWithDiscrepancy && hasDiscrepancy);
+      (showWithDiscrepancy && hasDiscrepancy) ||
+      (showCancelled && isCancelled);
     
     if (!statusMatch) return false;
     const matchesSearch =
@@ -398,7 +404,7 @@ const Reimbursements = () => {
         <div>
           <h1 className="text-3xl font-bold tracking-tight mb-2">Remboursements</h1>
           <p className="text-muted-foreground">
-            {reimbursements.length} remboursements importés · {matchedReimbursements.length} associés · {unmatchedReimbursements.length} non associés
+            {reimbursements.length} remboursements importés · {matchedReimbursements.length} associés · {unmatchedReimbursements.length} non associés · {cancelledReimbursements.length} annulés
           </p>
         </div>
 
@@ -446,6 +452,17 @@ const Reimbursements = () => {
               />
               <Label htmlFor="show-discrepancy" className="cursor-pointer text-sm whitespace-nowrap">
                 Avec écart ({reimbursementsWithDiscrepancy.length})
+              </Label>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="show-cancelled"
+                checked={showCancelled}
+                onCheckedChange={(checked) => setShowCancelled(checked as boolean)}
+              />
+              <Label htmlFor="show-cancelled" className="cursor-pointer text-sm whitespace-nowrap">
+                Annulés ({cancelledReimbursements.length})
               </Label>
             </div>
           </div>
@@ -527,7 +544,9 @@ const Reimbursements = () => {
                           </div>
                         </TableCell>
                         <TableCell>
-                          {group.all_matched ? (
+                          {group.reimbursements[0].status === 'cancelled' ? (
+                            <Badge variant="secondary" className="bg-gray-400 text-white">Annulé</Badge>
+                          ) : group.all_matched ? (
                             <Button 
                               variant="link" 
                               className="p-0 h-auto flex items-center gap-1"

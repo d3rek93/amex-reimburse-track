@@ -483,6 +483,24 @@ const Expenses = () => {
     // Process grouped reimbursements (with same expense_number)
     for (const [expenseNumber, reimbursements] of groupedReimbursements) {
       const totalAmount = reimbursements.reduce((sum, r) => sum + r.amount_eur, 0);
+      
+      // Check if reimbursements cancel each other out (total ≈ 0)
+      if (Math.abs(totalAmount) < 0.01) {
+        console.log(`[Cancelled] Reimbursement ${expenseNumber} cancels out (total: ${totalAmount})`);
+        // Mark all reimbursements in this group as cancelled
+        for (const reimbursement of reimbursements) {
+          await supabase
+            .from('reimbursements')
+            .update({ 
+              status: 'cancelled',
+              matched_expense_id: null 
+            })
+            .eq('id', reimbursement.id);
+        }
+        matchedCount += reimbursements.length;
+        continue;
+      }
+      
       const allMatched = reimbursements.every(r => r.matched_expense_id);
       
       if (allMatched) continue;
