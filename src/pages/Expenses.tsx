@@ -847,14 +847,26 @@ const Expenses = () => {
       }
 
       // Special case: GSM reimbursement + ORANGE expense -> source = "Prélèvement"
-      const isGsmReimbursement = reimbursement.category?.toLowerCase().includes('gsm');
+      const hasGsmReimbursement = relatedReimbursements.some((r) => r.category?.toLowerCase().includes('gsm'));
       const isOrangeExpense = expense.description?.toUpperCase().includes('ORANGE');
-      if (isGsmReimbursement && isOrangeExpense && expense.source !== 'Prélèvement') {
+      if (hasGsmReimbursement && isOrangeExpense && expense.source !== 'Prélèvement') {
         updateData.source = 'Prélèvement';
         needsUpdate = true;
       }
 
       if (needsUpdate) {
+        console.log('Fix-up matching update', {
+          expenseId: expense.id,
+          description: expense.description,
+          before: {
+            reimbursement_status: expense.reimbursement_status,
+            reimbursed_amount: expense.reimbursed_amount,
+            expense_number: expense.expense_number,
+            source: expense.source,
+          },
+          after: updateData,
+        });
+
         await supabase
           .from('expenses')
           .update(updateData)
