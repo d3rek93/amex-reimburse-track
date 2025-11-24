@@ -553,7 +553,7 @@ const Expenses = () => {
             .update({
               reimbursed_amount: totalAmount,
               reimbursement_status: 'complete',
-              expense_number: newNumbers,
+              expense_number: newNumbers.length > 0 ? newNumbers : [expenseNumber],
               source: 'Prélèvement',
             })
             .eq('id', orangeExpense.id);
