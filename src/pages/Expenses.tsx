@@ -639,33 +639,46 @@ const Expenses = () => {
         continue;
       }
 
-      // Automatic matching based on amount and date (± 5 days) for grouped reimbursements
+      // Automatic matching based on amount and date for grouped reimbursements
+      // Priority: exact date match first, then within ± 5 days
       const reimbDate = new Date(groupExpenseDate);
       console.log(`[Auto-match] Checking reimbursement ${expenseNumber}, amount: ${totalAmount}, date: ${groupExpenseDate}`);
       
-      const autoMatchExpense = allExpenses.find((exp) => {
+      // Find all potential matches with same amount
+      const potentialMatches = allExpenses.filter((exp) => {
         if (exp.is_personal) return false;
         
         // Check if expense is already matched to avoid double-matching
         const isAlreadyMatched = reimbursementsData.some(r => 
-          r.matched_expense_id === exp.id
+          r.matched_expense_id === exp.id && r.expense_number !== expenseNumber
         );
         if (isAlreadyMatched) return false;
 
         // Amount must match closely
         const amountMatch = Math.abs(exp.amount_eur - totalAmount) < 0.01;
-        if (!amountMatch) return false;
+        return amountMatch;
+      });
 
-        // Date must be within ± 5 days
+      // Sort by date proximity (closest first)
+      potentialMatches.sort((a, b) => {
+        const aDate = new Date(a.date);
+        const bDate = new Date(b.date);
+        const aDiff = Math.abs((aDate.getTime() - reimbDate.getTime()) / (1000 * 60 * 60 * 24));
+        const bDiff = Math.abs((bDate.getTime() - reimbDate.getTime()) / (1000 * 60 * 60 * 24));
+        return aDiff - bDiff;
+      });
+
+      // Find best match within date tolerance
+      const autoMatchExpense = potentialMatches.find((exp) => {
         const expDate = new Date(exp.date);
         const daysDiff = Math.abs((expDate.getTime() - reimbDate.getTime()) / (1000 * 60 * 60 * 24));
         const dateMatch = daysDiff <= 5;
 
-        if (amountMatch && dateMatch) {
+        if (dateMatch) {
           console.log(`[Auto-match] Found candidate: ${exp.description}, amount: ${exp.amount_eur}, date: ${exp.date}, daysDiff: ${daysDiff}`);
         }
 
-        return amountMatch && dateMatch;
+        return dateMatch;
       });
 
       if (autoMatchExpense) {
@@ -709,6 +722,12 @@ const Expenses = () => {
 
         const orangeExpense = allExpenses.find((exp) => {
           if (exp.is_personal) return false;
+          
+          // Check if expense is already matched to a different reimbursement group
+          const isAlreadyMatched = reimbursementsData.some(r => 
+            r.matched_expense_id === exp.id && r.expense_number !== expenseNumber
+          );
+          if (isAlreadyMatched) return false;
           
           const isOrange = exp.description?.toUpperCase().includes('PRLV SEPA ORANGE SA');
           if (!isOrange) return false;
@@ -756,17 +775,36 @@ const Expenses = () => {
 
       // Try matching by amount and payment date
       const groupPaymentDate = reimbursements[0].payment_date;
-      const matchingExpenseByDate = allExpenses.find((exp) => {
+      
+      // Find all potential matches with same amount
+      const potentialMatchesByPayment = allExpenses.filter((exp) => {
         if (exp.is_personal) return false;
         
-        const amountMatch = Math.abs(exp.amount_eur - totalAmount) < 0.01;
+        // Check if expense is already matched to a different reimbursement group
+        const isAlreadyMatched = reimbursementsData.some(r => 
+          r.matched_expense_id === exp.id && r.expense_number !== expenseNumber
+        );
+        if (isAlreadyMatched) return false;
         
+        const amountMatch = Math.abs(exp.amount_eur - totalAmount) < 0.01;
+        return amountMatch;
+      });
+
+      // Sort by date proximity to payment date
+      potentialMatchesByPayment.sort((a, b) => {
+        const aDate = new Date(a.date);
+        const bDate = new Date(b.date);
+        const paymentDate = new Date(groupPaymentDate);
+        const aDiff = Math.abs((aDate.getTime() - paymentDate.getTime()) / (1000 * 60 * 60 * 24));
+        const bDiff = Math.abs((bDate.getTime() - paymentDate.getTime()) / (1000 * 60 * 60 * 24));
+        return aDiff - bDiff;
+      });
+
+      const matchingExpenseByDate = potentialMatchesByPayment.find((exp) => {
         const expDate = new Date(exp.date);
         const paymentDate = new Date(groupPaymentDate);
         const daysDiff = Math.abs((expDate.getTime() - paymentDate.getTime()) / (1000 * 60 * 60 * 24));
-        const dateMatch = daysDiff <= 5;
-        
-        return amountMatch && dateMatch;
+        return daysDiff <= 5;
       });
 
       if (matchingExpenseByDate) {
