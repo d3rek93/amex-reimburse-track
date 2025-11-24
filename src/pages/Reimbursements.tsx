@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Navigation } from "@/components/Navigation";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Trash2, ChevronDown, ChevronRight } from "lucide-react";
+import { Loader2, Trash2, ChevronDown, ChevronRight, Unlink2, Search } from "lucide-react";
 import { Session } from "@supabase/supabase-js";
 import {
   Table,
@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -58,6 +59,7 @@ const Reimbursements = () => {
   const [reimbursements, setReimbursements] = useState<Reimbursement[]>([]);
   const [loading, setLoading] = useState(true);
   const [showMatched, setShowMatched] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const [expandedReimbursements, setExpandedReimbursements] = useState<Set<string>>(new Set());
   const [associatedExpenses, setAssociatedExpenses] = useState<Record<string, AssociatedExpense[]>>({});
 
@@ -153,6 +155,11 @@ const Reimbursements = () => {
       if (error) throw error;
 
       setReimbursements((prev) => prev.filter((r) => r.id !== id));
+      setAssociatedExpenses((prev) => {
+        const updated = { ...prev };
+        delete updated[id];
+        return updated;
+      });
       
       toast({
         title: "Remboursement supprimé",
@@ -163,6 +170,55 @@ const Reimbursements = () => {
       toast({
         title: "Erreur",
         description: "Impossible de supprimer le remboursement",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleUnmatchReimbursement = async (reimbursement: Reimbursement) => {
+    try {
+      const { id, matched_expense_id } = reimbursement;
+
+      if (matched_expense_id) {
+        const { error: expenseError } = await supabase
+          .from('expenses')
+          .update({
+            reimbursement_status: 'pending',
+            reimbursed_amount: 0,
+            expense_number: null,
+            considered_complete: false,
+          })
+          .eq('id', matched_expense_id);
+
+        if (expenseError) throw expenseError;
+      }
+
+      const { error } = await supabase
+        .from('reimbursements')
+        .update({ matched_expense_id: null })
+        .eq('id', id);
+
+      if (error) throw error;
+
+      setReimbursements((prev) =>
+        prev.map((r) => (r.id === id ? { ...r, matched_expense_id: null } : r))
+      );
+
+      setAssociatedExpenses((prev) => {
+        const updated = { ...prev };
+        delete updated[id];
+        return updated;
+      });
+
+      toast({
+        title: "Association supprimée",
+        description: "Le remboursement a été repassé en non associé et la dépense mise à jour",
+      });
+    } catch (error) {
+      console.error('Error unmatching reimbursement:', error);
+      toast({
+        title: "Erreur",
+        description: "Impossible de retirer l'association du remboursement",
         variant: "destructive",
       });
     }
@@ -183,9 +239,18 @@ const Reimbursements = () => {
   const matchedReimbursements = reimbursements.filter(r => r.matched_expense_id);
   const unmatchedReimbursements = reimbursements.filter(r => !r.matched_expense_id);
   
-  const displayedReimbursements = showMatched 
+  const baseDisplayedReimbursements = showMatched 
     ? reimbursements 
     : unmatchedReimbursements;
+
+  const displayedReimbursements = baseDisplayedReimbursements.filter((reimbursement) => {
+    const matchesSearch =
+      reimbursement.payment_reference.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      reimbursement.expense_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      reimbursement.category.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    return matchesSearch;
+  });
 
   return (
     <div className="min-h-screen bg-background">
@@ -200,13 +265,22 @@ const Reimbursements = () => {
         </div>
 
         <div className="flex items-center gap-6 bg-card p-4 rounded-lg border">
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Rechercher par référence, n° note ou catégorie..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10"
+            />
+          </div>
           <div className="flex items-center gap-2">
             <Checkbox
               id="show-matched"
               checked={showMatched}
               onCheckedChange={(checked) => setShowMatched(checked as boolean)}
             />
-            <Label htmlFor="show-matched" className="cursor-pointer text-sm">
+            <Label htmlFor="show-matched" className="cursor-pointer text-sm whitespace-nowrap">
               Afficher les remboursements associés
             </Label>
           </div>
@@ -262,30 +336,58 @@ const Reimbursements = () => {
                           )}
                         </TableCell>
                         <TableCell className="text-right">
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button variant="ghost" size="sm">
-                                <Trash2 className="h-4 w-4 text-destructive" />
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Confirmer la suppression</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  Êtes-vous sûr de vouloir supprimer ce remboursement ? Cette action est irréversible.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Annuler</AlertDialogCancel>
-                                <AlertDialogAction
-                                  onClick={() => handleDeleteReimbursement(reimbursement.id)}
-                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                >
-                                  Supprimer
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
+                          <div className="flex items-center justify-end gap-2">
+                            {reimbursement.matched_expense_id && (
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button variant="outline" size="sm">
+                                    <Unlink2 className="h-4 w-4 mr-1" />
+                                    Dissocier
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Retirer l'association</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      Ce remboursement sera repassé en non associé et la dépense liée redeviendra non remboursée sans numéro de note de frais.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Annuler</AlertDialogCancel>
+                                    <AlertDialogAction
+                                      onClick={() => handleUnmatchReimbursement(reimbursement)}
+                                    >
+                                      Confirmer
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            )}
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="ghost" size="sm">
+                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Confirmer la suppression</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Êtes-vous sûr de vouloir supprimer ce remboursement ? Cette action est irréversible.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Annuler</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => handleDeleteReimbursement(reimbursement.id)}
+                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                  >
+                                    Supprimer
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
                         </TableCell>
                       </TableRow>
                       
