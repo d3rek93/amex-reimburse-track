@@ -82,6 +82,7 @@ export type Database = {
           matched_expense_id: string | null
           payment_date: string
           payment_reference: string
+          status: string
           updated_at: string
           user_id: string
         }
@@ -95,6 +96,7 @@ export type Database = {
           matched_expense_id?: string | null
           payment_date: string
           payment_reference: string
+          status?: string
           updated_at?: string
           user_id: string
         }
@@ -108,6 +110,7 @@ export type Database = {
           matched_expense_id?: string | null
           payment_date?: string
           payment_reference?: string
+          status?: string
           updated_at?: string
           user_id?: string
         }
