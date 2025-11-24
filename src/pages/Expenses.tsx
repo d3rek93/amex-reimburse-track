@@ -800,28 +800,25 @@ const Expenses = () => {
       }
     }
 
-    // Fix-up pass: ensure all matched reimbursements properly update their expenses
-    for (const reimbursement of reimbursementsData) {
-      if (!reimbursement.matched_expense_id) continue;
-
-      const expense = allExpenses.find((exp) => exp.id === reimbursement.matched_expense_id);
-      if (!expense) continue;
+    // Fix-up pass: ensure all expenses linked to reimbursements are consistent
+    for (const expense of allExpenses) {
+      const relatedReimbursements = reimbursementsData.filter(
+        (r) => r.matched_expense_id === expense.id
+      );
+      if (relatedReimbursements.length === 0) continue;
 
       const updateData: any = {};
       let needsUpdate = false;
 
-      // Ensure reimbursement status is complete
+      // 1) Reimbursement status must be complete
       if (expense.reimbursement_status !== 'complete') {
         updateData.reimbursement_status = 'complete';
         needsUpdate = true;
       }
 
-      // Ensure reimbursed_amount equals sum of all matched reimbursements
-      const relatedReimbursements = reimbursementsData.filter(
-        (r) => r.matched_expense_id === expense.id
-      );
+      // 2) Reimbursed amount = sum of related reimbursements
       const totalMatchedAmount = relatedReimbursements.reduce(
-        (sum, r) => sum + r.amount_eur,
+        (sum, r) => sum + Number(r.amount_eur),
         0
       );
       if (Math.abs(Number(expense.reimbursed_amount) - totalMatchedAmount) > 0.01) {
@@ -829,7 +826,7 @@ const Expenses = () => {
         needsUpdate = true;
       }
 
-      // Ensure expense_number contains all related reimbursement numbers
+      // 3) Expense numbers = union of all reimbursement expense_numbers
       const currentNumbers = Array.isArray(expense.expense_number)
         ? expense.expense_number
         : expense.expense_number
@@ -838,16 +835,21 @@ const Expenses = () => {
 
       const numbersToAdd = relatedReimbursements
         .map((r) => r.expense_number)
-        .filter((num): num is string => !!num && !currentNumbers.includes(num));
+        .filter((num): num is string => !!num);
 
-      const newNumbers = [...currentNumbers, ...numbersToAdd];
-      if (newNumbers.length > 0 && newNumbers.join(',') !== currentNumbers.join(',')) {
-        updateData.expense_number = newNumbers;
+      const mergedNumbers = Array.from(new Set([...currentNumbers, ...numbersToAdd]));
+      if (
+        mergedNumbers.length > 0 &&
+        mergedNumbers.join(',') !== currentNumbers.join(',')
+      ) {
+        updateData.expense_number = mergedNumbers;
         needsUpdate = true;
       }
 
-      // Special case: GSM reimbursement + ORANGE expense -> source = "Prélèvement"
-      const hasGsmReimbursement = relatedReimbursements.some((r) => r.category?.toLowerCase().includes('gsm'));
+      // 4) Special case: any GSM reimbursement + ORANGE expense -> source = "Prélèvement"
+      const hasGsmReimbursement = relatedReimbursements.some((r) =>
+        r.category?.toLowerCase().includes('gsm')
+      );
       const isOrangeExpense = expense.description?.toUpperCase().includes('ORANGE');
       if (hasGsmReimbursement && isOrangeExpense && expense.source !== 'Prélèvement') {
         updateData.source = 'Prélèvement';
@@ -855,18 +857,6 @@ const Expenses = () => {
       }
 
       if (needsUpdate) {
-        console.log('Fix-up matching update', {
-          expenseId: expense.id,
-          description: expense.description,
-          before: {
-            reimbursement_status: expense.reimbursement_status,
-            reimbursed_amount: expense.reimbursed_amount,
-            expense_number: expense.expense_number,
-            source: expense.source,
-          },
-          after: updateData,
-        });
-
         await supabase
           .from('expenses')
           .update(updateData)
