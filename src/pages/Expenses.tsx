@@ -487,6 +487,11 @@ const Expenses = () => {
       
       if (allMatched) continue;
 
+      // Get the most recent expense_date from the group
+      const groupExpenseDate = reimbursements.reduce((latest, r) => {
+        return new Date(r.expense_date) > new Date(latest) ? r.expense_date : latest;
+      }, reimbursements[0].expense_date);
+
       // Try single expense match
       const matchingExpense = allExpenses.find((exp) => {
         const amountMatch = Math.abs(exp.amount_eur - totalAmount) < 0.01;
@@ -520,8 +525,8 @@ const Expenses = () => {
       // Special matching for GSM reimbursements → ORANGE expenses
       const isGsmGroup = reimbursements.every(r => r.category?.toLowerCase().includes('gsm'));
       if (isGsmGroup) {
-        const referenceReimbursement = reimbursements[0];
-        const reimbDate = new Date(referenceReimbursement.expense_date);
+        // Use the most recent expense_date from the group
+        const reimbDate = new Date(groupExpenseDate);
 
         const orangeExpense = allExpenses.find((exp) => {
           const isOrange = exp.description?.toUpperCase().includes('PRLV SEPA ORANGE SA');
