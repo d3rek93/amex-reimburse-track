@@ -477,13 +477,11 @@ const Expenses = () => {
     // Process grouped reimbursements (with same expense_number)
     for (const [expenseNumber, reimbursements] of groupedReimbursements) {
       const totalAmount = reimbursements.reduce((sum, r) => sum + r.amount_eur, 0);
-      const isGsmGroup = reimbursements.every(r => r.category?.toLowerCase().includes('gsm'));
       const allMatched = reimbursements.every(r => r.matched_expense_id);
       
-      // For non-GSM groups, skip if everything is already matched
-      if (allMatched && !isGsmGroup) continue;
+      if (allMatched) continue;
 
-      // Try single expense match based on explicit expense_number first
+      // Try single expense match
       const matchingExpense = allExpenses.find((exp) => {
         const amountMatch = Math.abs(exp.amount_eur - totalAmount) < 0.01;
         const hasExpenseNumber = Array.isArray(exp.expense_number) 
@@ -511,56 +509,6 @@ const Expenses = () => {
 
         matchedCount += reimbursements.length;
         continue;
-      }
-
-      // Special case: GSM reimbursements matching Orange expenses by month + amount
-      if (isGsmGroup) {
-        const referenceReimbursement = reimbursements[0];
-        const reimbDate = new Date(referenceReimbursement.expense_date);
-
-        const orangeExpense = allExpenses.find((exp) => {
-          const isOrange = exp.description?.toUpperCase().includes('ORANGE');
-          if (!isOrange) return false;
-
-          const amountMatch = Math.abs(exp.amount_eur - totalAmount) < 0.01;
-          const expDate = new Date(exp.date);
-          const sameMonth = expDate.getMonth() === reimbDate.getMonth() &&
-                            expDate.getFullYear() === reimbDate.getFullYear();
-
-          return amountMatch && sameMonth;
-        });
-
-        if (orangeExpense) {
-          const currentNumbers = Array.isArray(orangeExpense.expense_number)
-            ? orangeExpense.expense_number
-            : orangeExpense.expense_number
-              ? [orangeExpense.expense_number]
-              : [];
-
-          const newNumbers = currentNumbers.includes(expenseNumber)
-            ? currentNumbers
-            : [...currentNumbers, expenseNumber];
-
-          for (const reimbursement of reimbursements) {
-            await supabase
-              .from('reimbursements')
-              .update({ matched_expense_id: orangeExpense.id })
-              .eq('id', reimbursement.id);
-          }
-
-          await supabase
-            .from('expenses')
-            .update({
-              reimbursed_amount: totalAmount,
-              reimbursement_status: 'complete',
-              expense_number: newNumbers.length > 0 ? newNumbers : [expenseNumber],
-              source: 'Prélèvement',
-            })
-            .eq('id', orangeExpense.id);
-
-          matchedCount += reimbursements.length;
-          continue;
-        }
       }
 
       // Try matching with 2 expenses
@@ -618,29 +566,14 @@ const Expenses = () => {
       // Skip if already matched
       if (reimbursement.matched_expense_id) continue;
 
-      // Check if it's a GSM reimbursement
-      const isGsmReimbursement = reimbursement.category?.toLowerCase().includes('gsm');
-
       // Try single expense match first
       const matchingExpense = allExpenses.find((exp) => {
         const amountMatch = Math.abs(exp.amount_eur - reimbursement.amount_eur) < 0.01;
         
         const expDate = new Date(exp.date);
         const reimbDate = new Date(reimbursement.expense_date);
-        
-        // Check if expense is an Orange payment
-        const isOrangeExpense = exp.description?.toUpperCase().includes('ORANGE');
-        
-        let dateMatch;
-        if (isGsmReimbursement && isOrangeExpense) {
-          // For GSM reimbursements matching Orange expenses, use same month
-          dateMatch = expDate.getMonth() === reimbDate.getMonth() && 
-                     expDate.getFullYear() === reimbDate.getFullYear();
-        } else {
-          // Standard 5-day window for other expenses
-          const daysDiff = Math.abs((expDate.getTime() - reimbDate.getTime()) / (1000 * 60 * 60 * 24));
-          dateMatch = daysDiff <= 5;
-        }
+        const daysDiff = Math.abs((expDate.getTime() - reimbDate.getTime()) / (1000 * 60 * 60 * 24));
+        const dateMatch = daysDiff <= 5;
         
         return amountMatch && dateMatch;
       });
@@ -656,22 +589,13 @@ const Expenses = () => {
           ? [...currentNumbers, reimbursement.expense_number]
           : currentNumbers.length > 0 ? currentNumbers : null;
 
-        const isOrangeExpense = matchingExpense.description?.toUpperCase().includes('ORANGE');
-        
-        const updateData: any = {
-          reimbursed_amount: reimbursement.amount_eur,
-          reimbursement_status: 'complete',
-          expense_number: newNumbers,
-        };
-
-        // Tag Orange expenses as "Prélèvement" when matched with GSM reimbursement
-        if (isGsmReimbursement && isOrangeExpense) {
-          updateData.source = 'Prélèvement';
-        }
-
         await supabase
           .from('expenses')
-          .update(updateData)
+          .update({
+            reimbursed_amount: reimbursement.amount_eur,
+            reimbursement_status: 'complete',
+            expense_number: newNumbers,
+          })
           .eq('id', matchingExpense.id);
 
         await supabase
@@ -697,26 +621,10 @@ const Expenses = () => {
           const reimbDate = new Date(reimbursement.expense_date);
           const exp1Date = new Date(exp1.date);
           const exp2Date = new Date(exp2.date);
+          const daysDiff1 = Math.abs((exp1Date.getTime() - reimbDate.getTime()) / (1000 * 60 * 60 * 24));
+          const daysDiff2 = Math.abs((exp2Date.getTime() - reimbDate.getTime()) / (1000 * 60 * 60 * 24));
           
-          const isOrangeExpense1 = exp1.description?.toUpperCase().includes('ORANGE');
-          const isOrangeExpense2 = exp2.description?.toUpperCase().includes('ORANGE');
-          
-          let dateMatch1, dateMatch2;
-          if (isGsmReimbursement && (isOrangeExpense1 || isOrangeExpense2)) {
-            // For GSM reimbursements matching Orange expenses, use same month
-            dateMatch1 = exp1Date.getMonth() === reimbDate.getMonth() && 
-                        exp1Date.getFullYear() === reimbDate.getFullYear();
-            dateMatch2 = exp2Date.getMonth() === reimbDate.getMonth() && 
-                        exp2Date.getFullYear() === reimbDate.getFullYear();
-          } else {
-            // Standard 5-day window for other expenses
-            const daysDiff1 = Math.abs((exp1Date.getTime() - reimbDate.getTime()) / (1000 * 60 * 60 * 24));
-            const daysDiff2 = Math.abs((exp2Date.getTime() - reimbDate.getTime()) / (1000 * 60 * 60 * 24));
-            dateMatch1 = daysDiff1 <= 5;
-            dateMatch2 = daysDiff2 <= 5;
-          }
-          
-          if (!dateMatch1 || !dateMatch2) continue;
+          if (daysDiff1 > 5 || daysDiff2 > 5) continue;
 
           // Match found with 2 expenses
           const exp1Numbers = Array.isArray(exp1.expense_number) ? exp1.expense_number : exp1.expense_number ? [exp1.expense_number] : [];
@@ -730,34 +638,22 @@ const Expenses = () => {
             ? [...exp2Numbers, reimbursement.expense_number]
             : exp2Numbers.length > 0 ? exp2Numbers : null;
 
-          const updateData1: any = {
-            reimbursed_amount: exp1.amount_eur,
-            reimbursement_status: 'complete',
-            expense_number: newNumbers1,
-          };
-
-          const updateData2: any = {
-            reimbursed_amount: exp2.amount_eur,
-            reimbursement_status: 'complete',
-            expense_number: newNumbers2,
-          };
-
-          // Tag Orange expenses as "Prélèvement" when matched with GSM reimbursement
-          if (isGsmReimbursement && isOrangeExpense1) {
-            updateData1.source = 'Prélèvement';
-          }
-          if (isGsmReimbursement && isOrangeExpense2) {
-            updateData2.source = 'Prélèvement';
-          }
-
           await supabase
             .from('expenses')
-            .update(updateData1)
+            .update({
+              reimbursed_amount: exp1.amount_eur,
+              reimbursement_status: 'complete',
+              expense_number: newNumbers1,
+            })
             .eq('id', exp1.id);
 
           await supabase
             .from('expenses')
-            .update(updateData2)
+            .update({
+              reimbursed_amount: exp2.amount_eur,
+              reimbursement_status: 'complete',
+              expense_number: newNumbers2,
+            })
             .eq('id', exp2.id);
 
           await supabase
@@ -784,11 +680,8 @@ const Expenses = () => {
 
         const totalReimbursed = relatedReimbursements.reduce((sum, r) => sum + r.amount_eur, 0);
 
-        // If 100% of expense is covered by reimbursements, OR if expense is marked as considered_complete, mark them as matched
-        const isFullyReimbursed = Math.abs(totalReimbursed - expense.amount_eur) < 0.01;
-        const isConsideredComplete = expense.considered_complete && expense.reimbursement_status === 'complete';
-        
-        if (isFullyReimbursed || isConsideredComplete) {
+        // If 100% of expense is covered by reimbursements, mark them as matched
+        if (Math.abs(totalReimbursed - expense.amount_eur) < 0.01) {
           for (const reimbursement of relatedReimbursements) {
             await supabase
               .from('reimbursements')
@@ -797,70 +690,6 @@ const Expenses = () => {
             matchedCount++;
           }
         }
-      }
-    }
-
-    // Fix-up pass: ensure all expenses linked to reimbursements are consistent
-    for (const expense of allExpenses) {
-      const relatedReimbursements = reimbursementsData.filter(
-        (r) => r.matched_expense_id === expense.id
-      );
-      if (relatedReimbursements.length === 0) continue;
-
-      const updateData: any = {};
-      let needsUpdate = false;
-
-      // 1) Reimbursement status must be complete
-      if (expense.reimbursement_status !== 'complete') {
-        updateData.reimbursement_status = 'complete';
-        needsUpdate = true;
-      }
-
-      // 2) Reimbursed amount = sum of related reimbursements
-      const totalMatchedAmount = relatedReimbursements.reduce(
-        (sum, r) => sum + Number(r.amount_eur),
-        0
-      );
-      if (Math.abs(Number(expense.reimbursed_amount) - totalMatchedAmount) > 0.01) {
-        updateData.reimbursed_amount = totalMatchedAmount;
-        needsUpdate = true;
-      }
-
-      // 3) Expense numbers = union of all reimbursement expense_numbers
-      const currentNumbers = Array.isArray(expense.expense_number)
-        ? expense.expense_number
-        : expense.expense_number
-        ? [expense.expense_number]
-        : [];
-
-      const numbersToAdd = relatedReimbursements
-        .map((r) => r.expense_number)
-        .filter((num): num is string => !!num);
-
-      const mergedNumbers = Array.from(new Set([...currentNumbers, ...numbersToAdd]));
-      if (
-        mergedNumbers.length > 0 &&
-        mergedNumbers.join(',') !== currentNumbers.join(',')
-      ) {
-        updateData.expense_number = mergedNumbers;
-        needsUpdate = true;
-      }
-
-      // 4) Special case: any GSM reimbursement + ORANGE expense -> source = "Prélèvement"
-      const hasGsmReimbursement = relatedReimbursements.some((r) =>
-        r.category?.toLowerCase().includes('gsm')
-      );
-      const isOrangeExpense = expense.description?.toUpperCase().includes('ORANGE');
-      if (hasGsmReimbursement && isOrangeExpense && expense.source !== 'Prélèvement') {
-        updateData.source = 'Prélèvement';
-        needsUpdate = true;
-      }
-
-      if (needsUpdate) {
-        await supabase
-          .from('expenses')
-          .update(updateData)
-          .eq('id', expense.id);
       }
     }
 
