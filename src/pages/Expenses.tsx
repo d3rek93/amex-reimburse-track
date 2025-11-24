@@ -557,6 +557,57 @@ const Expenses = () => {
         continue;
       }
 
+      // Automatic matching based on amount and date (± 5 days) for grouped reimbursements
+      const reimbDate = new Date(groupExpenseDate);
+      const autoMatchExpense = allExpenses.find((exp) => {
+        // Check if expense is already matched to avoid double-matching
+        const isAlreadyMatched = reimbursementsData.some(r => 
+          r.matched_expense_id === exp.id
+        );
+        if (isAlreadyMatched) return false;
+
+        // Amount must match closely
+        const amountMatch = Math.abs(exp.amount_eur - totalAmount) < 0.01;
+        if (!amountMatch) return false;
+
+        // Date must be within ± 5 days
+        const expDate = new Date(exp.date);
+        const daysDiff = Math.abs((expDate.getTime() - reimbDate.getTime()) / (1000 * 60 * 60 * 24));
+        const dateMatch = daysDiff <= 5;
+
+        return amountMatch && dateMatch;
+      });
+
+      if (autoMatchExpense) {
+        // Auto-associate this grouped reimbursement with the found expense
+        const currentNumbers = Array.isArray(autoMatchExpense.expense_number)
+          ? autoMatchExpense.expense_number
+          : autoMatchExpense.expense_number
+            ? [autoMatchExpense.expense_number]
+            : [];
+
+        const newNumbers = [...new Set([...currentNumbers, expenseNumber])];
+
+        for (const reimbursement of reimbursements) {
+          await supabase
+            .from('reimbursements')
+            .update({ matched_expense_id: autoMatchExpense.id })
+            .eq('id', reimbursement.id);
+        }
+
+        await supabase
+          .from('expenses')
+          .update({
+            reimbursed_amount: totalAmount,
+            reimbursement_status: 'complete',
+            expense_number: newNumbers,
+          })
+          .eq('id', autoMatchExpense.id);
+
+        matchedCount += reimbursements.length;
+        continue;
+      }
+
       // Special matching for GSM reimbursements → ORANGE expenses
       const isGsmGroup = reimbursements.every(r => r.category?.toLowerCase().includes('gsm'));
       if (isGsmGroup) {
