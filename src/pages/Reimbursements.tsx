@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Navigation } from "@/components/Navigation";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Trash2, ChevronDown, ChevronRight, Unlink2, Search } from "lucide-react";
+import { Loader2, Trash2, ChevronDown, ChevronRight, Unlink2, Search, Plus } from "lucide-react";
 import { Session } from "@supabase/supabase-js";
 import {
   Table,
@@ -29,6 +29,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { ManualExpenseDialog } from "@/components/ManualExpenseDialog";
 
 interface Reimbursement {
   id: string;
@@ -83,6 +84,10 @@ const Reimbursements = () => {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [associatedExpenses, setAssociatedExpenses] = useState<Record<string, AssociatedExpense[]>>({});
   const [groupExpenseData, setGroupExpenseData] = useState<Record<string, GroupExpenseData>>({});
+  const [manualExpenseDialog, setManualExpenseDialog] = useState<{
+    open: boolean;
+    reimbursement: Reimbursement | null;
+  }>({ open: false, reimbursement: null });
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -561,6 +566,16 @@ const Reimbursements = () => {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-2">
+                            {!hasMultiple && !firstReimbursement.matched_expense_id && (
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                onClick={() => setManualExpenseDialog({ open: true, reimbursement: firstReimbursement })}
+                              >
+                                <Plus className="h-4 w-4 mr-1" />
+                                Dépense manuelle
+                              </Button>
+                            )}
                             {!hasMultiple && firstReimbursement.matched_expense_id && (
                               <AlertDialog>
                                 <AlertDialogTrigger asChild>
@@ -739,6 +754,15 @@ const Reimbursements = () => {
           </Table>
         </div>
       </div>
+
+      {manualExpenseDialog.reimbursement && (
+        <ManualExpenseDialog
+          open={manualExpenseDialog.open}
+          onOpenChange={(open) => setManualExpenseDialog({ open, reimbursement: null })}
+          reimbursement={manualExpenseDialog.reimbursement}
+          onSuccess={loadReimbursements}
+        />
+      )}
     </div>
   );
 };
