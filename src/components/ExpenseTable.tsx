@@ -213,9 +213,19 @@ export const ExpenseTable = ({ expenses, onUpdateExpense, onDeleteExpense, highl
                 {expense.reimbursementStatus === "partial" && (
                   <Checkbox
                     checked={expense.consideredComplete || false}
-                    onCheckedChange={(checked) =>
-                      onUpdateExpense(expense.id, { consideredComplete: checked as boolean })
-                    }
+                    onCheckedChange={(checked) => {
+                      if (checked) {
+                        onUpdateExpense(expense.id, { 
+                          consideredComplete: true,
+                          reimbursementStatus: "complete"
+                        });
+                      } else {
+                        onUpdateExpense(expense.id, { 
+                          consideredComplete: false,
+                          reimbursementStatus: "partial"
+                        });
+                      }
+                    }}
                     title="Remboursement maximum atteint"
                   />
                 )}
