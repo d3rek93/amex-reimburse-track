@@ -680,8 +680,11 @@ const Expenses = () => {
 
         const totalReimbursed = relatedReimbursements.reduce((sum, r) => sum + r.amount_eur, 0);
 
-        // If 100% of expense is covered by reimbursements, mark them as matched
-        if (Math.abs(totalReimbursed - expense.amount_eur) < 0.01) {
+        // If 100% of expense is covered by reimbursements, OR if expense is marked as considered_complete, mark them as matched
+        const isFullyReimbursed = Math.abs(totalReimbursed - expense.amount_eur) < 0.01;
+        const isConsideredComplete = expense.considered_complete && expense.reimbursement_status === 'complete';
+        
+        if (isFullyReimbursed || isConsideredComplete) {
           for (const reimbursement of relatedReimbursements) {
             await supabase
               .from('reimbursements')
