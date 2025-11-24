@@ -573,6 +573,48 @@ const Expenses = () => {
         }
       }
 
+      // Try matching by amount and payment date
+      const groupPaymentDate = reimbursements[0].payment_date;
+      const matchingExpenseByDate = allExpenses.find((exp) => {
+        const amountMatch = Math.abs(exp.amount_eur - totalAmount) < 0.01;
+        
+        const expDate = new Date(exp.date);
+        const paymentDate = new Date(groupPaymentDate);
+        const daysDiff = Math.abs((expDate.getTime() - paymentDate.getTime()) / (1000 * 60 * 60 * 24));
+        const dateMatch = daysDiff <= 5;
+        
+        return amountMatch && dateMatch;
+      });
+
+      if (matchingExpenseByDate) {
+        const currentNumbers = Array.isArray(matchingExpenseByDate.expense_number)
+          ? matchingExpenseByDate.expense_number
+          : matchingExpenseByDate.expense_number
+            ? [matchingExpenseByDate.expense_number]
+            : [];
+
+        const newNumbers = [...new Set([...currentNumbers, expenseNumber])];
+
+        for (const reimbursement of reimbursements) {
+          await supabase
+            .from('reimbursements')
+            .update({ matched_expense_id: matchingExpenseByDate.id })
+            .eq('id', reimbursement.id);
+        }
+
+        await supabase
+          .from('expenses')
+          .update({
+            reimbursed_amount: totalAmount,
+            reimbursement_status: 'complete',
+            expense_number: newNumbers,
+          })
+          .eq('id', matchingExpenseByDate.id);
+
+        matchedCount += reimbursements.length;
+        continue;
+      }
+
       // Try matching with 2 expenses
       for (let i = 0; i < allExpenses.length; i++) {
         for (let j = i + 1; j < allExpenses.length; j++) {
