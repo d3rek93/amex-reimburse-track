@@ -17,7 +17,7 @@ export interface Expense {
   conversionFees?: number;
   amountEur: number;
   expenseNumber?: string[];
-  reimbursementStatus: "pending" | "partial" | "complete";
+  reimbursementStatus: "pending" | "partial" | "complete" | "not_applicable";
   reimbursedAmount: number;
   isPersonal: boolean;
   source: "AMEX" | "Boursobank" | "Manuel";
@@ -86,6 +86,7 @@ export const ExpenseTable = ({ expenses, onUpdateExpense, onDeleteExpense, highl
       pending: { label: "En attente", className: "bg-warning text-warning-foreground" },
       partial: { label: "Partiel", className: "bg-warning/70 text-warning-foreground" },
       complete: { label: "Remboursé", className: "bg-success text-success-foreground" },
+      not_applicable: { label: "Non concerné", className: "bg-muted text-muted-foreground" },
     };
     const variant = variants[status];
     return <Badge className={variant.className}>{variant.label}</Badge>;
