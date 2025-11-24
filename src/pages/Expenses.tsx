@@ -728,136 +728,52 @@ const Expenses = () => {
         continue;
       }
 
-      // Try matching with multiple expenses (2, 3, or 4)
-      let matchFound = false;
-      
-      // Try 2 expenses
-      for (let i = 0; i < allExpenses.length && !matchFound; i++) {
-        for (let j = i + 1; j < allExpenses.length && !matchFound; j++) {
-          const exps = [allExpenses[i], allExpenses[j]];
-          const combinedAmount = exps.reduce((sum, exp) => sum + exp.amount_eur, 0);
+      // Try matching with 2 expenses
+      for (let i = 0; i < allExpenses.length; i++) {
+        for (let j = i + 1; j < allExpenses.length; j++) {
+          const exp1 = allExpenses[i];
+          const exp2 = allExpenses[j];
+          
+          const combinedAmount = exp1.amount_eur + exp2.amount_eur;
           const amountMatch = Math.abs(combinedAmount - totalAmount) < 0.01;
           
           if (!amountMatch) continue;
 
-          const allHaveNumber = exps.every(exp => 
-            Array.isArray(exp.expense_number) 
-              ? exp.expense_number.includes(expenseNumber)
-              : exp.expense_number === expenseNumber
-          );
+          const exp1HasNumber = Array.isArray(exp1.expense_number) 
+            ? exp1.expense_number.includes(expenseNumber)
+            : exp1.expense_number === expenseNumber;
+          const exp2HasNumber = Array.isArray(exp2.expense_number) 
+            ? exp2.expense_number.includes(expenseNumber)
+            : exp2.expense_number === expenseNumber;
 
-          if (!allHaveNumber) continue;
+          if (!exp1HasNumber || !exp2HasNumber) continue;
 
-          // Match found
+          // Match found with 2 expenses
           for (const reimbursement of reimbursements) {
             await supabase
               .from('reimbursements')
-              .update({ matched_expense_id: exps[0].id })
+              .update({ matched_expense_id: exp1.id })
               .eq('id', reimbursement.id);
           }
 
-          for (const exp of exps) {
-            await supabase
-              .from('expenses')
-              .update({
-                reimbursed_amount: exp.amount_eur,
-                reimbursement_status: 'complete',
-              })
-              .eq('id', exp.id);
-          }
+          await supabase
+            .from('expenses')
+            .update({
+              reimbursed_amount: exp1.amount_eur,
+              reimbursement_status: 'complete',
+            })
+            .eq('id', exp1.id);
+
+          await supabase
+            .from('expenses')
+            .update({
+              reimbursed_amount: exp2.amount_eur,
+              reimbursement_status: 'complete',
+            })
+            .eq('id', exp2.id);
 
           matchedCount += reimbursements.length;
-          matchFound = true;
-        }
-      }
-
-      // Try 3 expenses
-      if (!matchFound) {
-        for (let i = 0; i < allExpenses.length && !matchFound; i++) {
-          for (let j = i + 1; j < allExpenses.length && !matchFound; j++) {
-            for (let k = j + 1; k < allExpenses.length && !matchFound; k++) {
-              const exps = [allExpenses[i], allExpenses[j], allExpenses[k]];
-              const combinedAmount = exps.reduce((sum, exp) => sum + exp.amount_eur, 0);
-              const amountMatch = Math.abs(combinedAmount - totalAmount) < 0.01;
-              
-              if (!amountMatch) continue;
-
-              const allHaveNumber = exps.every(exp => 
-                Array.isArray(exp.expense_number) 
-                  ? exp.expense_number.includes(expenseNumber)
-                  : exp.expense_number === expenseNumber
-              );
-
-              if (!allHaveNumber) continue;
-
-              // Match found
-              for (const reimbursement of reimbursements) {
-                await supabase
-                  .from('reimbursements')
-                  .update({ matched_expense_id: exps[0].id })
-                  .eq('id', reimbursement.id);
-              }
-
-              for (const exp of exps) {
-                await supabase
-                  .from('expenses')
-                  .update({
-                    reimbursed_amount: exp.amount_eur,
-                    reimbursement_status: 'complete',
-                  })
-                  .eq('id', exp.id);
-              }
-
-              matchedCount += reimbursements.length;
-              matchFound = true;
-            }
-          }
-        }
-      }
-
-      // Try 4 expenses
-      if (!matchFound) {
-        for (let i = 0; i < allExpenses.length && !matchFound; i++) {
-          for (let j = i + 1; j < allExpenses.length && !matchFound; j++) {
-            for (let k = j + 1; k < allExpenses.length && !matchFound; k++) {
-              for (let l = k + 1; l < allExpenses.length && !matchFound; l++) {
-                const exps = [allExpenses[i], allExpenses[j], allExpenses[k], allExpenses[l]];
-                const combinedAmount = exps.reduce((sum, exp) => sum + exp.amount_eur, 0);
-                const amountMatch = Math.abs(combinedAmount - totalAmount) < 0.01;
-                
-                if (!amountMatch) continue;
-
-                const allHaveNumber = exps.every(exp => 
-                  Array.isArray(exp.expense_number) 
-                    ? exp.expense_number.includes(expenseNumber)
-                    : exp.expense_number === expenseNumber
-                );
-
-                if (!allHaveNumber) continue;
-
-                // Match found
-                for (const reimbursement of reimbursements) {
-                  await supabase
-                    .from('reimbursements')
-                    .update({ matched_expense_id: exps[0].id })
-                    .eq('id', reimbursement.id);
-                }
-
-                for (const exp of exps) {
-                  await supabase
-                    .from('expenses')
-                    .update({
-                      reimbursed_amount: exp.amount_eur,
-                      reimbursement_status: 'complete',
-                    })
-                    .eq('id', exp.id);
-                }
-
-                matchedCount += reimbursements.length;
-                matchFound = true;
-              }
-            }
-          }
+          break;
         }
       }
     }
@@ -958,151 +874,62 @@ const Expenses = () => {
         }
       }
 
-      // Try matching with multiple expenses (2, 3, or 4)
-      let singleMatchFound = false;
-      
-      // Try 2 expenses
-      for (let i = 0; i < allExpenses.length && !singleMatchFound; i++) {
-        for (let j = i + 1; j < allExpenses.length && !singleMatchFound; j++) {
-          const exps = [allExpenses[i], allExpenses[j]];
-          const combinedAmount = exps.reduce((sum, exp) => sum + exp.amount_eur, 0);
+      // Try matching with 2 expenses
+      for (let i = 0; i < allExpenses.length; i++) {
+        for (let j = i + 1; j < allExpenses.length; j++) {
+          const exp1 = allExpenses[i];
+          const exp2 = allExpenses[j];
+          
+          const combinedAmount = exp1.amount_eur + exp2.amount_eur;
           const amountMatch = Math.abs(combinedAmount - reimbursement.amount_eur) < 0.01;
           
           if (!amountMatch) continue;
 
           const reimbDate = new Date(reimbursement.expense_date);
-          const allDatesMatch = exps.every(exp => {
-            const expDate = new Date(exp.date);
-            const daysDiff = Math.abs((expDate.getTime() - reimbDate.getTime()) / (1000 * 60 * 60 * 24));
-            return daysDiff <= 5;
-          });
+          const exp1Date = new Date(exp1.date);
+          const exp2Date = new Date(exp2.date);
+          const daysDiff1 = Math.abs((exp1Date.getTime() - reimbDate.getTime()) / (1000 * 60 * 60 * 24));
+          const daysDiff2 = Math.abs((exp2Date.getTime() - reimbDate.getTime()) / (1000 * 60 * 60 * 24));
           
-          if (!allDatesMatch) continue;
+          if (daysDiff1 > 5 || daysDiff2 > 5) continue;
 
-          // Match found
-          for (const exp of exps) {
-            const expNumbers = Array.isArray(exp.expense_number) ? exp.expense_number : exp.expense_number ? [exp.expense_number] : [];
-            const newNumbers = reimbursement.expense_number && !expNumbers.includes(reimbursement.expense_number)
-              ? [...expNumbers, reimbursement.expense_number]
-              : expNumbers.length > 0 ? expNumbers : null;
+          // Match found with 2 expenses
+          const exp1Numbers = Array.isArray(exp1.expense_number) ? exp1.expense_number : exp1.expense_number ? [exp1.expense_number] : [];
+          const exp2Numbers = Array.isArray(exp2.expense_number) ? exp2.expense_number : exp2.expense_number ? [exp2.expense_number] : [];
+          
+          const newNumbers1 = reimbursement.expense_number && !exp1Numbers.includes(reimbursement.expense_number)
+            ? [...exp1Numbers, reimbursement.expense_number]
+            : exp1Numbers.length > 0 ? exp1Numbers : null;
+          
+          const newNumbers2 = reimbursement.expense_number && !exp2Numbers.includes(reimbursement.expense_number)
+            ? [...exp2Numbers, reimbursement.expense_number]
+            : exp2Numbers.length > 0 ? exp2Numbers : null;
 
-            await supabase
-              .from('expenses')
-              .update({
-                reimbursed_amount: exp.amount_eur,
-                reimbursement_status: 'complete',
-                expense_number: newNumbers,
-              })
-              .eq('id', exp.id);
-          }
+          await supabase
+            .from('expenses')
+            .update({
+              reimbursed_amount: exp1.amount_eur,
+              reimbursement_status: 'complete',
+              expense_number: newNumbers1,
+            })
+            .eq('id', exp1.id);
+
+          await supabase
+            .from('expenses')
+            .update({
+              reimbursed_amount: exp2.amount_eur,
+              reimbursement_status: 'complete',
+              expense_number: newNumbers2,
+            })
+            .eq('id', exp2.id);
 
           await supabase
             .from('reimbursements')
-            .update({ matched_expense_id: exps[0].id })
+            .update({ matched_expense_id: exp1.id })
             .eq('id', reimbursement.id);
 
           matchedCount++;
-          singleMatchFound = true;
-        }
-      }
-
-      // Try 3 expenses
-      if (!singleMatchFound) {
-        for (let i = 0; i < allExpenses.length && !singleMatchFound; i++) {
-          for (let j = i + 1; j < allExpenses.length && !singleMatchFound; j++) {
-            for (let k = j + 1; k < allExpenses.length && !singleMatchFound; k++) {
-              const exps = [allExpenses[i], allExpenses[j], allExpenses[k]];
-              const combinedAmount = exps.reduce((sum, exp) => sum + exp.amount_eur, 0);
-              const amountMatch = Math.abs(combinedAmount - reimbursement.amount_eur) < 0.01;
-              
-              if (!amountMatch) continue;
-
-              const reimbDate = new Date(reimbursement.expense_date);
-              const allDatesMatch = exps.every(exp => {
-                const expDate = new Date(exp.date);
-                const daysDiff = Math.abs((expDate.getTime() - reimbDate.getTime()) / (1000 * 60 * 60 * 24));
-                return daysDiff <= 5;
-              });
-              
-              if (!allDatesMatch) continue;
-
-              // Match found
-              for (const exp of exps) {
-                const expNumbers = Array.isArray(exp.expense_number) ? exp.expense_number : exp.expense_number ? [exp.expense_number] : [];
-                const newNumbers = reimbursement.expense_number && !expNumbers.includes(reimbursement.expense_number)
-                  ? [...expNumbers, reimbursement.expense_number]
-                  : expNumbers.length > 0 ? expNumbers : null;
-
-                await supabase
-                  .from('expenses')
-                  .update({
-                    reimbursed_amount: exp.amount_eur,
-                    reimbursement_status: 'complete',
-                    expense_number: newNumbers,
-                  })
-                  .eq('id', exp.id);
-              }
-
-              await supabase
-                .from('reimbursements')
-                .update({ matched_expense_id: exps[0].id })
-                .eq('id', reimbursement.id);
-
-              matchedCount++;
-              singleMatchFound = true;
-            }
-          }
-        }
-      }
-
-      // Try 4 expenses
-      if (!singleMatchFound) {
-        for (let i = 0; i < allExpenses.length && !singleMatchFound; i++) {
-          for (let j = i + 1; j < allExpenses.length && !singleMatchFound; j++) {
-            for (let k = j + 1; k < allExpenses.length && !singleMatchFound; k++) {
-              for (let l = k + 1; l < allExpenses.length && !singleMatchFound; l++) {
-                const exps = [allExpenses[i], allExpenses[j], allExpenses[k], allExpenses[l]];
-                const combinedAmount = exps.reduce((sum, exp) => sum + exp.amount_eur, 0);
-                const amountMatch = Math.abs(combinedAmount - reimbursement.amount_eur) < 0.01;
-                
-                if (!amountMatch) continue;
-
-                const reimbDate = new Date(reimbursement.expense_date);
-                const allDatesMatch = exps.every(exp => {
-                  const expDate = new Date(exp.date);
-                  const daysDiff = Math.abs((expDate.getTime() - reimbDate.getTime()) / (1000 * 60 * 60 * 24));
-                  return daysDiff <= 5;
-                });
-                
-                if (!allDatesMatch) continue;
-
-                // Match found
-                for (const exp of exps) {
-                  const expNumbers = Array.isArray(exp.expense_number) ? exp.expense_number : exp.expense_number ? [exp.expense_number] : [];
-                  const newNumbers = reimbursement.expense_number && !expNumbers.includes(reimbursement.expense_number)
-                    ? [...expNumbers, reimbursement.expense_number]
-                    : expNumbers.length > 0 ? expNumbers : null;
-
-                  await supabase
-                    .from('expenses')
-                    .update({
-                      reimbursed_amount: exp.amount_eur,
-                      reimbursement_status: 'complete',
-                      expense_number: newNumbers,
-                    })
-                    .eq('id', exp.id);
-                }
-
-                await supabase
-                  .from('reimbursements')
-                  .update({ matched_expense_id: exps[0].id })
-                  .eq('id', reimbursement.id);
-
-                matchedCount++;
-                singleMatchFound = true;
-              }
-            }
-          }
+          break;
         }
       }
     }
