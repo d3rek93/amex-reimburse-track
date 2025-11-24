@@ -41,12 +41,34 @@ export const ExpenseTable = ({ expenses, onUpdateExpense, onDeleteExpense, highl
     setEditValue(expense.expenseNumber?.join(", ") || "");
   };
 
-  const handleSave = (id: string) => {
+  const handleSave = async (id: string) => {
     const numbers = editValue
       .split(",")
       .map(n => n.trim())
       .filter(n => n.length > 0);
-    onUpdateExpense(id, { expenseNumber: numbers.length > 0 ? numbers : undefined });
+    
+    const expense = expenses.find(e => e.id === id);
+    if (!expense) return;
+    
+    // If removing expense numbers, we need to detach reimbursements
+    const oldNumbers = expense.expenseNumber || [];
+    const newNumbers = numbers.length > 0 ? numbers : undefined;
+    const removedNumbers = oldNumbers.filter(num => !numbers.includes(num));
+    
+    // First update the expense
+    onUpdateExpense(id, { expenseNumber: newNumbers });
+    
+    // Then detach reimbursements for removed numbers
+    if (removedNumbers.length > 0) {
+      // Import supabase at component level if needed, or pass as prop
+      // For now, we'll handle this in the parent component
+      onUpdateExpense(id, { 
+        expenseNumber: newNumbers,
+        reimbursedAmount: 0,
+        reimbursementStatus: 'pending'
+      });
+    }
+    
     setEditingId(null);
   };
 
