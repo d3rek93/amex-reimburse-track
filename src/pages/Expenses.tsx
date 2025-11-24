@@ -954,6 +954,7 @@ const Expenses = () => {
 
     // Check expenses with expense_numbers and mark reimbursements as matched
     for (const expense of allExpenses) {
+      if (expense.is_personal) continue;
       if (!expense.expense_number || !Array.isArray(expense.expense_number)) continue;
 
       for (const expNum of expense.expense_number) {
