@@ -511,6 +511,56 @@ const Expenses = () => {
         continue;
       }
 
+      // Special matching for GSM reimbursements → ORANGE expenses
+      const isGsmGroup = reimbursements.every(r => r.category?.toLowerCase().includes('gsm'));
+      if (isGsmGroup) {
+        const referenceReimbursement = reimbursements[0];
+        const reimbDate = new Date(referenceReimbursement.expense_date);
+
+        const orangeExpense = allExpenses.find((exp) => {
+          const isOrange = exp.description?.toUpperCase().includes('PRLV SEPA ORANGE SA');
+          if (!isOrange) return false;
+
+          const amountMatch = Math.abs(exp.amount_eur - totalAmount) < 0.01;
+          
+          // Expense date is typically ~10 days AFTER reimbursement date
+          const expDate = new Date(exp.date);
+          const daysDiff = (expDate.getTime() - reimbDate.getTime()) / (1000 * 60 * 60 * 24);
+          const dateMatch = daysDiff >= 0 && daysDiff <= 15; // Allow 0-15 days after
+
+          return amountMatch && dateMatch;
+        });
+
+        if (orangeExpense) {
+          const currentNumbers = Array.isArray(orangeExpense.expense_number)
+            ? orangeExpense.expense_number
+            : orangeExpense.expense_number
+              ? [orangeExpense.expense_number]
+              : [];
+
+          const newNumbers = [...new Set([...currentNumbers, expenseNumber])];
+
+          for (const reimbursement of reimbursements) {
+            await supabase
+              .from('reimbursements')
+              .update({ matched_expense_id: orangeExpense.id })
+              .eq('id', reimbursement.id);
+          }
+
+          await supabase
+            .from('expenses')
+            .update({
+              reimbursed_amount: totalAmount,
+              reimbursement_status: 'complete',
+              expense_number: newNumbers,
+            })
+            .eq('id', orangeExpense.id);
+
+          matchedCount += reimbursements.length;
+          continue;
+        }
+      }
+
       // Try matching with 2 expenses
       for (let i = 0; i < allExpenses.length; i++) {
         for (let j = i + 1; j < allExpenses.length; j++) {
@@ -605,6 +655,55 @@ const Expenses = () => {
 
         matchedCount++;
         continue;
+      }
+
+      // Special matching for GSM reimbursements → ORANGE expenses
+      const isGsmReimbursement = reimbursement.category?.toLowerCase().includes('gsm');
+      if (isGsmReimbursement) {
+        const reimbDate = new Date(reimbursement.expense_date);
+
+        const orangeExpense = allExpenses.find((exp) => {
+          const isOrange = exp.description?.toUpperCase().includes('PRLV SEPA ORANGE SA');
+          if (!isOrange) return false;
+
+          const amountMatch = Math.abs(exp.amount_eur - reimbursement.amount_eur) < 0.01;
+          
+          // Expense date is typically ~10 days AFTER reimbursement date
+          const expDate = new Date(exp.date);
+          const daysDiff = (expDate.getTime() - reimbDate.getTime()) / (1000 * 60 * 60 * 24);
+          const dateMatch = daysDiff >= 0 && daysDiff <= 15; // Allow 0-15 days after
+
+          return amountMatch && dateMatch;
+        });
+
+        if (orangeExpense) {
+          const currentNumbers = Array.isArray(orangeExpense.expense_number)
+            ? orangeExpense.expense_number
+            : orangeExpense.expense_number
+              ? [orangeExpense.expense_number]
+              : [];
+
+          const newNumbers = reimbursement.expense_number && !currentNumbers.includes(reimbursement.expense_number)
+            ? [...currentNumbers, reimbursement.expense_number]
+            : currentNumbers.length > 0 ? currentNumbers : [reimbursement.expense_number];
+
+          await supabase
+            .from('expenses')
+            .update({
+              reimbursed_amount: reimbursement.amount_eur,
+              reimbursement_status: 'complete',
+              expense_number: newNumbers,
+            })
+            .eq('id', orangeExpense.id);
+
+          await supabase
+            .from('reimbursements')
+            .update({ matched_expense_id: orangeExpense.id })
+            .eq('id', reimbursement.id);
+
+          matchedCount++;
+          continue;
+        }
       }
 
       // Try matching with 2 expenses
