@@ -522,6 +522,41 @@ const Expenses = () => {
         continue;
       }
 
+      // Check for manual association: expense with this number marked as complete
+      const manuallyMatchedExpense = allExpenses.find((exp) => {
+        const hasThisNumber = Array.isArray(exp.expense_number)
+          ? exp.expense_number.includes(expenseNumber)
+          : exp.expense_number === expenseNumber;
+        
+        return hasThisNumber && exp.considered_complete;
+      });
+
+      if (manuallyMatchedExpense) {
+        // Respect user's manual association even if amounts differ
+        for (const reimbursement of reimbursements) {
+          await supabase
+            .from('reimbursements')
+            .update({ matched_expense_id: manuallyMatchedExpense.id })
+            .eq('id', reimbursement.id);
+        }
+
+        // Update expense with reimbursement info, respecting existing reimbursed_amount if already set
+        const finalReimbursedAmount = manuallyMatchedExpense.reimbursed_amount > 0 
+          ? manuallyMatchedExpense.reimbursed_amount 
+          : totalAmount;
+
+        await supabase
+          .from('expenses')
+          .update({
+            reimbursed_amount: finalReimbursedAmount,
+            reimbursement_status: 'complete',
+          })
+          .eq('id', manuallyMatchedExpense.id);
+
+        matchedCount += reimbursements.length;
+        continue;
+      }
+
       // Special matching for GSM reimbursements → ORANGE expenses
       const isGsmGroup = reimbursements.every(r => r.category?.toLowerCase().includes('gsm'));
       if (isGsmGroup) {
