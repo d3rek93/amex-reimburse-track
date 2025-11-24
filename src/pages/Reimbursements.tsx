@@ -139,6 +139,7 @@ const Reimbursements = () => {
       // Group reimbursements by expense_number
       const expenseNumbers = new Set(reimbursementsList.map(r => r.expense_number));
       const groupData: Record<string, GroupExpenseData> = {};
+      const expensesMap: Record<string, AssociatedExpense[]> = {};
 
       // For each expense number, find matching expenses
       expenseNumbers.forEach(expenseNumber => {
@@ -154,9 +155,16 @@ const Reimbursements = () => {
           expenses: matchingExpenses,
           totalExpenseAmount,
         };
+
+        // Also store by first reimbursement ID for easy access
+        const firstReimbursement = reimbursementsList.find(r => r.expense_number === expenseNumber);
+        if (firstReimbursement && matchingExpenses.length > 0) {
+          expensesMap[firstReimbursement.id] = matchingExpenses;
+        }
       });
 
       setGroupExpenseData(groupData);
+      setAssociatedExpenses(expensesMap);
     } catch (error) {
       console.error('Error loading expenses for groups:', error);
     }
