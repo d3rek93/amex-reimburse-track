@@ -800,6 +800,16 @@ const Expenses = () => {
       }
     }
 
+    // Fix-up pass: update source to "Prélèvement" for expenses with "PRLV" in description
+    for (const expense of allExpenses) {
+      if (expense.description?.toUpperCase().includes('PRLV') && expense.source !== 'Prélèvement') {
+        await supabase
+          .from('expenses')
+          .update({ source: 'Prélèvement' })
+          .eq('id', expense.id);
+      }
+    }
+
     return matchedCount;
   };
 
