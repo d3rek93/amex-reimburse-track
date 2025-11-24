@@ -522,46 +522,37 @@ const Expenses = () => {
         continue;
       }
 
-      // Check for manual association: any expense with this number that has been marked as not "en attente"
-      const manuallyMatchedExpense = allExpenses.find((exp) => {
+      // Check for manual or explicit association: any expense with this number
+      const expenseWithNumber = allExpenses.find((exp) => {
         const hasThisNumber = Array.isArray(exp.expense_number)
           ? exp.expense_number.includes(expenseNumber)
           : exp.expense_number === expenseNumber;
         
-        // On considère comme association manuelle si :
-        // - la dépense est marquée comme complétée, OU
-        // - le statut de remboursement n'est plus "pending" (ex: partiel), OU
-        // - un montant remboursé a déjà été saisi
-        const manuallyHandled =
-          exp.considered_complete ||
-          exp.reimbursement_status !== 'pending' ||
-          (exp.reimbursed_amount ?? 0) > 0;
-        
-        return hasThisNumber && manuallyHandled;
+        return hasThisNumber;
       });
-
-      if (manuallyMatchedExpense) {
-        // Respect user's manual association even if amounts differ
+ 
+      if (expenseWithNumber) {
+        // Respect explicit association by expense number even if amounts differ
         for (const reimbursement of reimbursements) {
           await supabase
             .from('reimbursements')
-            .update({ matched_expense_id: manuallyMatchedExpense.id })
+            .update({ matched_expense_id: expenseWithNumber.id })
             .eq('id', reimbursement.id);
         }
-
-        // Update expense with reimbursement info, respecting existing reimbursed_amount if already set
-        const finalReimbursedAmount = manuallyMatchedExpense.reimbursed_amount > 0 
-          ? manuallyMatchedExpense.reimbursed_amount 
+ 
+        // Update expense with reimbursement info, but don't override an existing reimbursed_amount > 0
+        const finalReimbursedAmount = (expenseWithNumber.reimbursed_amount ?? 0) > 0 
+          ? expenseWithNumber.reimbursed_amount 
           : totalAmount;
-
+ 
         await supabase
           .from('expenses')
           .update({
             reimbursed_amount: finalReimbursedAmount,
             reimbursement_status: 'complete',
           })
-          .eq('id', manuallyMatchedExpense.id);
-
+          .eq('id', expenseWithNumber.id);
+ 
         matchedCount += reimbursements.length;
         continue;
       }
