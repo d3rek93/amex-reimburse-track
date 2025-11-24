@@ -559,6 +559,8 @@ const Expenses = () => {
 
       // Automatic matching based on amount and date (± 5 days) for grouped reimbursements
       const reimbDate = new Date(groupExpenseDate);
+      console.log(`[Auto-match] Checking reimbursement ${expenseNumber}, amount: ${totalAmount}, date: ${groupExpenseDate}`);
+      
       const autoMatchExpense = allExpenses.find((exp) => {
         // Check if expense is already matched to avoid double-matching
         const isAlreadyMatched = reimbursementsData.some(r => 
@@ -575,10 +577,15 @@ const Expenses = () => {
         const daysDiff = Math.abs((expDate.getTime() - reimbDate.getTime()) / (1000 * 60 * 60 * 24));
         const dateMatch = daysDiff <= 5;
 
+        if (amountMatch && dateMatch) {
+          console.log(`[Auto-match] Found candidate: ${exp.description}, amount: ${exp.amount_eur}, date: ${exp.date}, daysDiff: ${daysDiff}`);
+        }
+
         return amountMatch && dateMatch;
       });
 
       if (autoMatchExpense) {
+        console.log(`[Auto-match] Matching ${expenseNumber} with expense ${autoMatchExpense.id}`);
         // Auto-associate this grouped reimbursement with the found expense
         const currentNumbers = Array.isArray(autoMatchExpense.expense_number)
           ? autoMatchExpense.expense_number
@@ -606,6 +613,8 @@ const Expenses = () => {
 
         matchedCount += reimbursements.length;
         continue;
+      } else {
+        console.log(`[Auto-match] No automatic match found for ${expenseNumber}`);
       }
 
       // Special matching for GSM reimbursements → ORANGE expenses
