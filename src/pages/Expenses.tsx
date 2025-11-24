@@ -800,6 +800,68 @@ const Expenses = () => {
       }
     }
 
+    // Fix-up pass: ensure all matched reimbursements properly update their expenses
+    for (const reimbursement of reimbursementsData) {
+      if (!reimbursement.matched_expense_id) continue;
+
+      const expense = allExpenses.find((exp) => exp.id === reimbursement.matched_expense_id);
+      if (!expense) continue;
+
+      const updateData: any = {};
+      let needsUpdate = false;
+
+      // Ensure reimbursement status is complete
+      if (expense.reimbursement_status !== 'complete') {
+        updateData.reimbursement_status = 'complete';
+        needsUpdate = true;
+      }
+
+      // Ensure reimbursed_amount equals sum of all matched reimbursements
+      const relatedReimbursements = reimbursementsData.filter(
+        (r) => r.matched_expense_id === expense.id
+      );
+      const totalMatchedAmount = relatedReimbursements.reduce(
+        (sum, r) => sum + r.amount_eur,
+        0
+      );
+      if (Math.abs(Number(expense.reimbursed_amount) - totalMatchedAmount) > 0.01) {
+        updateData.reimbursed_amount = totalMatchedAmount;
+        needsUpdate = true;
+      }
+
+      // Ensure expense_number contains all related reimbursement numbers
+      const currentNumbers = Array.isArray(expense.expense_number)
+        ? expense.expense_number
+        : expense.expense_number
+        ? [expense.expense_number]
+        : [];
+
+      const numbersToAdd = relatedReimbursements
+        .map((r) => r.expense_number)
+        .filter((num): num is string => !!num && !currentNumbers.includes(num));
+
+      const newNumbers = [...currentNumbers, ...numbersToAdd];
+      if (newNumbers.length > 0 && newNumbers.join(',') !== currentNumbers.join(',')) {
+        updateData.expense_number = newNumbers;
+        needsUpdate = true;
+      }
+
+      // Special case: GSM reimbursement + ORANGE expense -> source = "Prélèvement"
+      const isGsmReimbursement = reimbursement.category?.toLowerCase().includes('gsm');
+      const isOrangeExpense = expense.description?.toUpperCase().includes('ORANGE');
+      if (isGsmReimbursement && isOrangeExpense && expense.source !== 'Prélèvement') {
+        updateData.source = 'Prélèvement';
+        needsUpdate = true;
+      }
+
+      if (needsUpdate) {
+        await supabase
+          .from('expenses')
+          .update(updateData)
+          .eq('id', expense.id);
+      }
+    }
+
     return matchedCount;
   };
 
