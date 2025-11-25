@@ -426,13 +426,17 @@ const Reimbursements = ({ embedded = false }: ReimbursementsProps = {}) => {
       reimbursementsByGroupKey.set(groupKey, current + r.amount_eur);
     });
 
-  // Calculate which logical groups have discrepancies
+  // Calculate which logical groups have discrepancies (excluding approved ones)
   const groupKeysWithDiscrepancy = new Set<string>();
   reimbursementsByGroupKey.forEach((totalReimbursement, groupKey) => {
     const groupInfo = expenseGroupTotals[groupKey];
     if (groupInfo) {
       const hasDiscrepancy = Math.abs(groupInfo.totalExpenseAmount - totalReimbursement) > 0.01;
-      if (hasDiscrepancy) {
+      // Check if any reimbursement in this group has approved the discrepancy
+      const hasApprovedDiscrepancy = reimbursements.some(
+        (r) => (expenseNumberToGroupKey[r.expense_number] || r.expense_number) === groupKey && r.discrepancy_approved
+      );
+      if (hasDiscrepancy && !hasApprovedDiscrepancy) {
         groupKeysWithDiscrepancy.add(groupKey);
       }
     }
