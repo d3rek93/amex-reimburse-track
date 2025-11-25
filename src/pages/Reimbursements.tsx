@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Navigation } from "@/components/Navigation";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Trash2, ChevronDown, ChevronRight, Unlink2, Search, Plus } from "lucide-react";
+import { Loader2, Trash2, ChevronDown, ChevronRight, Unlink2, Search, Plus, ArrowUpDown } from "lucide-react";
 import { Session } from "@supabase/supabase-js";
 import {
   Table,
@@ -96,6 +96,7 @@ const Reimbursements = ({ embedded = false }: ReimbursementsProps = {}) => {
     open: boolean;
     reimbursement: Reimbursement | null;
   }>({ open: false, reimbursement: null });
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
 
   useEffect(() => {
     if (embedded) {
@@ -556,7 +557,12 @@ const Reimbursements = ({ embedded = false }: ReimbursementsProps = {}) => {
     }
   });
 
-  const reimbursementGroups = Array.from(groupedReimbursements.values());
+  const reimbursementGroups = Array.from(groupedReimbursements.values()).sort((a, b) => {
+    if (sortOrder === "asc") {
+      return a.payment_date.localeCompare(b.payment_date);
+    }
+    return b.payment_date.localeCompare(a.payment_date);
+  });
 
   return (
     <div className={embedded ? "" : "min-h-screen bg-background"}>
@@ -649,7 +655,17 @@ const Reimbursements = ({ embedded = false }: ReimbursementsProps = {}) => {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Date paiement</TableHead>
+                <TableHead>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
+                    className="h-8 gap-1"
+                  >
+                    Date paiement
+                    <ArrowUpDown className="h-3 w-3" />
+                  </Button>
+                </TableHead>
                 <TableHead>Date dépense</TableHead>
                 <TableHead>Référence</TableHead>
                 <TableHead>N° note</TableHead>

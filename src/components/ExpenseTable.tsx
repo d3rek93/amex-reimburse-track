@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Edit2, Check, X, Trash2 } from "lucide-react";
+import { Edit2, Check, X, Trash2, ArrowUpDown } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
 export interface Expense {
@@ -35,6 +35,14 @@ export const ExpenseTable = ({ expenses, onUpdateExpense, onDeleteExpense, highl
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [partialAmounts, setPartialAmounts] = useState<Record<string, number>>({});
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+
+  const sortedExpenses = [...expenses].sort((a, b) => {
+    if (sortOrder === "asc") {
+      return a.date.localeCompare(b.date);
+    }
+    return b.date.localeCompare(a.date);
+  });
 
   const handleEdit = (expense: Expense) => {
     setEditingId(expense.id);
@@ -121,7 +129,17 @@ export const ExpenseTable = ({ expenses, onUpdateExpense, onDeleteExpense, highl
           <TableRow>
             <TableHead>Personnel</TableHead>
             <TableHead>Source</TableHead>
-            <TableHead>Date</TableHead>
+            <TableHead>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
+                className="h-8 gap-1"
+              >
+                Date
+                <ArrowUpDown className="h-3 w-3" />
+              </Button>
+            </TableHead>
             <TableHead>Description</TableHead>
             <TableHead>Montant original</TableHead>
             <TableHead>Frais conv.</TableHead>
@@ -134,7 +152,7 @@ export const ExpenseTable = ({ expenses, onUpdateExpense, onDeleteExpense, highl
           </TableRow>
         </TableHeader>
         <TableBody>
-          {expenses.map((expense) => (
+          {sortedExpenses.map((expense) => (
             <TableRow 
               key={expense.id} 
               className={`

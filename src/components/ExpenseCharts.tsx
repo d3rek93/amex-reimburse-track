@@ -1,0 +1,164 @@
+import { Card } from "@/components/ui/card";
+import { Expense } from "./ExpenseTable";
+import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+
+interface ExpenseChartsProps {
+  expenses: Expense[];
+  reimbursements: any[];
+}
+
+export const ExpenseCharts = ({ expenses, reimbursements }: ExpenseChartsProps) => {
+  const professionalExpenses = expenses.filter((e) => !e.isPersonal);
+  const activeReimbursements = reimbursements.filter((r) => r.status !== 'cancelled');
+
+  // Monthly expenses and reimbursements
+  const monthlyData = professionalExpenses.reduce((acc, expense) => {
+    const month = expense.date.substring(0, 7); // YYYY-MM
+    if (!acc[month]) {
+      acc[month] = { month, expenses: 0, reimbursements: 0 };
+    }
+    acc[month].expenses += expense.amountEur;
+    return acc;
+  }, {} as Record<string, { month: string; expenses: number; reimbursements: number }>);
+
+  activeReimbursements.forEach((reimb) => {
+    const month = reimb.payment_date.substring(0, 7);
+    if (monthlyData[month]) {
+      monthlyData[month].reimbursements += reimb.amount_eur;
+    }
+  });
+
+  const monthlyChartData = Object.values(monthlyData)
+    .sort((a, b) => a.month.localeCompare(b.month))
+    .map((item) => ({
+      month: new Date(item.month + "-01").toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' }),
+      Dépenses: parseFloat(item.expenses.toFixed(2)),
+      Remboursements: parseFloat(item.reimbursements.toFixed(2)),
+    }));
+
+  // Source breakdown
+  const sourceData = [
+    {
+      name: "AMEX",
+      value: professionalExpenses
+        .filter((e) => e.source === "AMEX")
+        .reduce((sum, e) => sum + e.amountEur, 0),
+    },
+    {
+      name: "Boursobank",
+      value: professionalExpenses
+        .filter((e) => e.source === "Boursobank")
+        .reduce((sum, e) => sum + e.amountEur, 0),
+    },
+    {
+      name: "Manuel",
+      value: professionalExpenses
+        .filter((e) => e.source === "Manuel")
+        .reduce((sum, e) => sum + e.amountEur, 0),
+    },
+  ].filter((item) => item.value > 0);
+
+  const COLORS = ['hsl(var(--primary))', 'hsl(var(--success))', 'hsl(var(--info))'];
+
+  // Status breakdown
+  const statusData = [
+    {
+      name: "En attente",
+      value: professionalExpenses.filter((e) => e.reimbursementStatus === "pending").length,
+    },
+    {
+      name: "Partiel",
+      value: professionalExpenses.filter((e) => e.reimbursementStatus === "partial").length,
+    },
+    {
+      name: "Remboursé",
+      value: professionalExpenses.filter((e) => e.reimbursementStatus === "complete").length,
+    },
+  ].filter((item) => item.value > 0);
+
+  const STATUS_COLORS = ['hsl(var(--warning))', 'hsl(var(--info))', 'hsl(var(--success))'];
+
+  return (
+    <div className="space-y-6">
+      {/* Monthly trend */}
+      <Card className="p-6">
+        <h3 className="text-lg font-semibold mb-4">Évolution mensuelle</h3>
+        <ResponsiveContainer width="100%" height={300}>
+          <LineChart data={monthlyChartData}>
+            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+            <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" />
+            <YAxis stroke="hsl(var(--muted-foreground))" />
+            <Tooltip
+              contentStyle={{
+                backgroundColor: "hsl(var(--card))",
+                border: "1px solid hsl(var(--border))",
+                borderRadius: "var(--radius)",
+              }}
+              labelStyle={{ color: "hsl(var(--foreground))" }}
+            />
+            <Legend />
+            <Line type="monotone" dataKey="Dépenses" stroke="hsl(var(--primary))" strokeWidth={2} />
+            <Line type="monotone" dataKey="Remboursements" stroke="hsl(var(--success))" strokeWidth={2} />
+          </LineChart>
+        </ResponsiveContainer>
+      </Card>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Source breakdown */}
+        <Card className="p-6">
+          <h3 className="text-lg font-semibold mb-4">Répartition par source</h3>
+          <ResponsiveContainer width="100%" height={250}>
+            <PieChart>
+              <Pie
+                data={sourceData}
+                cx="50%"
+                cy="50%"
+                labelLine={false}
+                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                outerRadius={80}
+                fill="hsl(var(--primary))"
+                dataKey="value"
+              >
+                {sourceData.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                ))}
+              </Pie>
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: "hsl(var(--card))",
+                  border: "1px solid hsl(var(--border))",
+                  borderRadius: "var(--radius)",
+                }}
+                formatter={(value: number) => `${value.toFixed(2)} €`}
+              />
+            </PieChart>
+          </ResponsiveContainer>
+        </Card>
+
+        {/* Status breakdown */}
+        <Card className="p-6">
+          <h3 className="text-lg font-semibold mb-4">Statut des remboursements</h3>
+          <ResponsiveContainer width="100%" height={250}>
+            <BarChart data={statusData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+              <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" />
+              <YAxis stroke="hsl(var(--muted-foreground))" />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: "hsl(var(--card))",
+                  border: "1px solid hsl(var(--border))",
+                  borderRadius: "var(--radius)",
+                }}
+              />
+              <Bar dataKey="value" fill="hsl(var(--primary))">
+                {statusData.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={STATUS_COLORS[index % STATUS_COLORS.length]} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </Card>
+      </div>
+    </div>
+  );
+};
