@@ -19,7 +19,11 @@ const excelSerialToDateString = (serial: number): string => {
   return date.toISOString().slice(0, 10);
 };
  
-const Expenses = () => {
+interface ExpensesProps {
+  embedded?: boolean;
+}
+
+const Expenses = ({ embedded = false }: ExpensesProps = {}) => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [session, setSession] = useState<Session | null>(null);
@@ -51,6 +55,17 @@ const Expenses = () => {
   }, []);
 
   useEffect(() => {
+    if (embedded) {
+      supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
+        setSession(currentSession);
+        if (currentSession) {
+          loadExpenses();
+        }
+        setLoading(false);
+      });
+      return;
+    }
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, currentSession) => {
         setSession(currentSession);
@@ -70,7 +85,7 @@ const Expenses = () => {
     });
 
     return () => subscription.unsubscribe();
-  }, [navigate]);
+  }, [navigate, embedded]);
 
   const loadExpenses = async () => {
     try {
@@ -1155,26 +1170,43 @@ const Expenses = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <Navigation onUpload={() => setShowUploadDialog(true)} />
+    <div className={embedded ? "" : "min-h-screen bg-background"}>
+      {!embedded && <Navigation onUpload={() => setShowUploadDialog(true)} />}
       
-      <div className="container mx-auto py-8 px-4 space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight mb-2">Dépenses</h1>
-            <p className="text-muted-foreground">
-              Gérez vos dépenses professionnelles
-            </p>
+      <div className={embedded ? "h-full p-4 space-y-4" : "container mx-auto py-8 px-4 space-y-6"}>
+        {!embedded && (
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight mb-2">Dépenses</h1>
+              <p className="text-muted-foreground">
+                Gérez vos dépenses professionnelles
+              </p>
+            </div>
+            <Button 
+              onClick={handleRefreshMatching} 
+              disabled={refreshing}
+              variant="outline"
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+              Rafraîchir les correspondances
+            </Button>
           </div>
-          <Button 
-            onClick={handleRefreshMatching} 
-            disabled={refreshing}
-            variant="outline"
-          >
-            <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
-            Rafraîchir les correspondances
-          </Button>
-        </div>
+        )}
+
+        {embedded && (
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-bold">Dépenses</h2>
+            <Button 
+              onClick={handleRefreshMatching} 
+              disabled={refreshing}
+              size="sm"
+              variant="outline"
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+              Rafraîchir
+            </Button>
+          </div>
+        )}
 
         {uploading && (
           <div className="flex items-center justify-center gap-2 text-muted-foreground bg-muted p-4 rounded-lg">

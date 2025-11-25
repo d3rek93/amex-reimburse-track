@@ -69,7 +69,11 @@ interface GroupExpenseData {
   totalExpenseAmount: number;
 }
 
-const Reimbursements = () => {
+interface ReimbursementsProps {
+  embedded?: boolean;
+}
+
+const Reimbursements = ({ embedded = false }: ReimbursementsProps = {}) => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [session, setSession] = useState<Session | null>(null);
@@ -90,6 +94,17 @@ const Reimbursements = () => {
   }>({ open: false, reimbursement: null });
 
   useEffect(() => {
+    if (embedded) {
+      supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
+        setSession(currentSession);
+        if (currentSession) {
+          loadReimbursements();
+        }
+        setLoading(false);
+      });
+      return;
+    }
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, currentSession) => {
         setSession(currentSession);
@@ -109,7 +124,7 @@ const Reimbursements = () => {
     });
 
     return () => subscription.unsubscribe();
-  }, [navigate]);
+  }, [navigate, embedded]);
 
   const loadReimbursements = async () => {
     try {
@@ -402,16 +417,20 @@ const Reimbursements = () => {
   const reimbursementGroups = Array.from(groupedReimbursements.values());
 
   return (
-    <div className="min-h-screen bg-background">
-      <Navigation onUpload={() => {}} />
+    <div className={embedded ? "" : "min-h-screen bg-background"}>
+      {!embedded && <Navigation onUpload={() => {}} />}
       
-      <div className="container mx-auto py-8 px-4 space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight mb-2">Remboursements</h1>
-          <p className="text-muted-foreground">
-            {reimbursements.length} remboursements importés · {matchedReimbursements.length} associés · {unmatchedReimbursements.length} non associés · {cancelledReimbursements.length} annulés
-          </p>
-        </div>
+      <div className={embedded ? "h-full p-4 space-y-4" : "container mx-auto py-8 px-4 space-y-6"}>
+        {!embedded ? (
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight mb-2">Remboursements</h1>
+            <p className="text-muted-foreground">
+              {reimbursements.length} remboursements importés · {matchedReimbursements.length} associés · {unmatchedReimbursements.length} non associés · {cancelledReimbursements.length} annulés
+            </p>
+          </div>
+        ) : (
+          <h2 className="text-xl font-bold">Remboursements</h2>
+        )}
 
         <div className="space-y-4">
           <div className="flex items-center gap-6 bg-card p-4 rounded-lg border">
