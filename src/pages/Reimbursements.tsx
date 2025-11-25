@@ -41,6 +41,7 @@ interface Reimbursement {
   amount_eur: number;
   matched_expense_id: string | null;
   status: string;
+  discrepancy_approved: boolean;
 }
 
 interface ReimbursementGroup {
@@ -83,6 +84,7 @@ const Reimbursements = ({ embedded = false }: ReimbursementsProps = {}) => {
   const [showMatched, setShowMatched] = useState(false);
   const [showWithDiscrepancy, setShowWithDiscrepancy] = useState(false);
   const [showCancelled, setShowCancelled] = useState(false);
+  const [showDiscrepancyApproved, setShowDiscrepancyApproved] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedReimbursements, setExpandedReimbursements] = useState<Set<string>>(new Set());
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
@@ -362,6 +364,41 @@ const Reimbursements = ({ embedded = false }: ReimbursementsProps = {}) => {
     }
   };
 
+  const handleApproveDiscrepancy = async (expenseNumber: string, approved: boolean) => {
+    try {
+      // Update all reimbursements with this expense_number
+      const { error } = await supabase
+        .from('reimbursements')
+        .update({ discrepancy_approved: approved })
+        .eq('expense_number', expenseNumber);
+
+      if (error) throw error;
+
+      // Update local state
+      setReimbursements((prev) =>
+        prev.map((r) => 
+          r.expense_number === expenseNumber 
+            ? { ...r, discrepancy_approved: approved } 
+            : r
+        )
+      );
+
+      toast({
+        title: approved ? "Écart approuvé" : "Approbation annulée",
+        description: approved 
+          ? "L'écart a été marqué comme approuvé" 
+          : "L'approbation de l'écart a été retirée",
+      });
+    } catch (error) {
+      console.error('Error approving discrepancy:', error);
+      toast({
+        title: "Erreur",
+        description: "Impossible de modifier le statut de l'écart",
+        variant: "destructive",
+      });
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -377,6 +414,7 @@ const Reimbursements = ({ embedded = false }: ReimbursementsProps = {}) => {
   const matchedReimbursements = reimbursements.filter(r => r.matched_expense_id && r.status !== 'cancelled');
   const unmatchedReimbursements = reimbursements.filter(r => !r.matched_expense_id && r.status !== 'cancelled');
   const cancelledReimbursements = reimbursements.filter(r => r.status === 'cancelled');
+  const discrepancyApprovedReimbursements = reimbursements.filter(r => r.discrepancy_approved);
   
   // Group reimbursements by logical expense group (based on shared expense numbers) to calculate discrepancies
   const reimbursementsByGroupKey = new Map<string, number>();
@@ -412,12 +450,14 @@ const Reimbursements = ({ embedded = false }: ReimbursementsProps = {}) => {
     const isUnmatched = !reimbursement.matched_expense_id && reimbursement.status !== 'cancelled';
     const groupKey = expenseNumberToGroupKey[reimbursement.expense_number] || reimbursement.expense_number;
     const hasDiscrepancy = groupKeysWithDiscrepancy.has(groupKey);
+    const isDiscrepancyApproved = reimbursement.discrepancy_approved;
     
     const statusMatch = 
       (showUnmatched && isUnmatched) ||
       (showMatched && isMatched) ||
       (showWithDiscrepancy && hasDiscrepancy) ||
-      (showCancelled && isCancelled);
+      (showCancelled && isCancelled) ||
+      (showDiscrepancyApproved && isDiscrepancyApproved);
     
     if (!statusMatch) return false;
     const matchesSearch =
@@ -471,7 +511,7 @@ const Reimbursements = ({ embedded = false }: ReimbursementsProps = {}) => {
           <div>
             <h1 className="text-3xl font-bold tracking-tight mb-2">Remboursements</h1>
             <p className="text-muted-foreground">
-              {reimbursements.length} remboursements importés · {matchedReimbursements.length} associés · {unmatchedReimbursements.length} non associés · {cancelledReimbursements.length} annulés
+              {reimbursements.length} remboursements importés · {matchedReimbursements.length} associés · {unmatchedReimbursements.length} non associés · {cancelledReimbursements.length} annulés · {discrepancyApprovedReimbursements.length} écarts approuvés
             </p>
           </div>
         ) : (
@@ -533,6 +573,17 @@ const Reimbursements = ({ embedded = false }: ReimbursementsProps = {}) => {
               />
               <Label htmlFor="show-cancelled" className="cursor-pointer text-sm whitespace-nowrap">
                 Annulés ({cancelledReimbursements.length})
+              </Label>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="show-discrepancy-approved"
+                checked={showDiscrepancyApproved}
+                onCheckedChange={(checked) => setShowDiscrepancyApproved(checked as boolean)}
+              />
+              <Label htmlFor="show-discrepancy-approved" className="cursor-pointer text-sm whitespace-nowrap">
+                Écart approuvé ({discrepancyApprovedReimbursements.length})
               </Label>
             </div>
           </div>
@@ -609,9 +660,24 @@ const Reimbursements = ({ embedded = false }: ReimbursementsProps = {}) => {
                           <div className="flex items-center justify-end gap-2">
                             <span>{group.total_amount.toFixed(2)} €</span>
                             {hasAmountMismatch && groupInfo && (
-                              <Badge variant="outline" className="bg-orange-500 text-white border-orange-600">
-                                Δ {(totalReimbursementForGroup - groupInfo.totalExpenseAmount).toFixed(2)} €
-                              </Badge>
+                              <>
+                                <Badge variant="outline" className="bg-orange-500 text-white border-orange-600">
+                                  Δ {(totalReimbursementForGroup - groupInfo.totalExpenseAmount).toFixed(2)} €
+                                </Badge>
+                                <div className="flex items-center gap-2 ml-2">
+                                  <Checkbox
+                                    id={`approve-${group.expense_number}`}
+                                    checked={group.reimbursements[0].discrepancy_approved}
+                                    onCheckedChange={(checked) => handleApproveDiscrepancy(group.expense_number, checked as boolean)}
+                                  />
+                                  <Label 
+                                    htmlFor={`approve-${group.expense_number}`} 
+                                    className="cursor-pointer text-xs text-muted-foreground whitespace-nowrap"
+                                  >
+                                    Accepter l'écart
+                                  </Label>
+                                </div>
+                              </>
                             )}
                           </div>
                         </TableCell>

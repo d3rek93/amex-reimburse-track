@@ -76,6 +76,7 @@ export type Database = {
           amount_eur: number
           category: string
           created_at: string
+          discrepancy_approved: boolean
           expense_date: string
           expense_number: string
           id: string
@@ -90,6 +91,7 @@ export type Database = {
           amount_eur: number
           category: string
           created_at?: string
+          discrepancy_approved?: boolean
           expense_date: string
           expense_number: string
           id?: string
@@ -104,6 +106,7 @@ export type Database = {
           amount_eur?: number
           category?: string
           created_at?: string
+          discrepancy_approved?: boolean
           expense_date?: string
           expense_number?: string
           id?: string
