@@ -165,12 +165,14 @@ const Reimbursements = ({ embedded = false }: ReimbursementsProps = {}) => {
       const groupData: Record<string, GroupExpenseData> = {};
       const expensesMap: Record<string, AssociatedExpense[]> = {};
 
-      // For each expense number, find matching expenses
+      // For each expense number, find matching expenses (excluding personal expenses)
       expenseNumbers.forEach(expenseNumber => {
         const matchingExpenses = (allExpenses || []).filter(exp => 
-          Array.isArray(exp.expense_number) 
-            ? exp.expense_number.includes(expenseNumber)
-            : exp.expense_number === expenseNumber
+          !exp.is_personal && (
+            Array.isArray(exp.expense_number) 
+              ? exp.expense_number.includes(expenseNumber)
+              : exp.expense_number === expenseNumber
+          )
         );
 
         const totalExpenseAmount = matchingExpenses.reduce((sum, exp) => sum + exp.amount_eur, 0);
@@ -337,9 +339,9 @@ const Reimbursements = ({ embedded = false }: ReimbursementsProps = {}) => {
   const unmatchedReimbursements = reimbursements.filter(r => !r.matched_expense_id && r.status !== 'cancelled');
   const cancelledReimbursements = reimbursements.filter(r => r.status === 'cancelled');
   
-  // Group all reimbursements to calculate discrepancies
+  // Group all reimbursements to calculate discrepancies (excluding cancelled reimbursements)
   const tempGrouped = new Map<string, number>();
-  reimbursements.forEach(r => {
+  reimbursements.filter(r => r.status !== 'cancelled').forEach(r => {
     const current = tempGrouped.get(r.expense_number) || 0;
     tempGrouped.set(r.expense_number, current + r.amount_eur);
   });
