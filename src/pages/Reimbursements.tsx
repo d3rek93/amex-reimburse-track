@@ -523,11 +523,12 @@ const Reimbursements = ({ embedded = false }: ReimbursementsProps = {}) => {
                   const isExpanded = expandedReimbursements.has(firstReimbursement.id);
                   const expenses = associatedExpenses[firstReimbursement.id] || [];
                   
-                  // Check for amount mismatch
+                  // Use total reimbursements for this expense number (all non-cancelled)
                   const groupData = groupExpenseData[group.expense_number];
+                  const totalReimbursementForGroup = tempGrouped.get(group.expense_number) || 0;
                   const hasAmountMismatch = groupData && 
                     groupData.expenses.length > 0 && 
-                    Math.abs(groupData.totalExpenseAmount - group.total_amount) > 0.01;
+                    Math.abs(groupData.totalExpenseAmount - totalReimbursementForGroup) > 0.01;
                   
                   const rowClassName = hasMultiple 
                     ? "font-semibold" + (hasAmountMismatch ? " bg-orange-50 dark:bg-orange-950/20 hover:bg-orange-100 dark:hover:bg-orange-950/30" : "")
@@ -564,7 +565,7 @@ const Reimbursements = ({ embedded = false }: ReimbursementsProps = {}) => {
                             <span>{group.total_amount.toFixed(2)} €</span>
                             {hasAmountMismatch && groupData && (
                               <Badge variant="outline" className="bg-orange-500 text-white border-orange-600">
-                                Δ {(group.total_amount - groupData.totalExpenseAmount).toFixed(2)} €
+                                Δ {(totalReimbursementForGroup - groupData.totalExpenseAmount).toFixed(2)} €
                               </Badge>
                             )}
                           </div>
