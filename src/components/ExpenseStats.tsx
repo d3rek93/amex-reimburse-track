@@ -4,13 +4,19 @@ import { TrendingUp, Clock, CheckCircle, XCircle } from "lucide-react";
 
 interface ExpenseStatsProps {
   expenses: Expense[];
+  reimbursements: any[];
 }
 
-export const ExpenseStats = ({ expenses }: ExpenseStatsProps) => {
+export const ExpenseStats = ({ expenses, reimbursements }: ExpenseStatsProps) => {
   const professionalExpenses = expenses.filter((e) => !e.isPersonal);
-
+  
+  // Filter out cancelled reimbursements
+  const activeReimbursements = reimbursements.filter((r) => r.status !== 'cancelled');
+  
+  // Calculate total reimbursed from active reimbursements only
+  const totalReimbursed = activeReimbursements.reduce((sum, r) => sum + r.amount_eur, 0);
+  
   const totalAmount = professionalExpenses.reduce((sum, e) => sum + e.amountEur, 0);
-  const totalReimbursed = professionalExpenses.reduce((sum, e) => sum + e.reimbursedAmount, 0);
   const pending = professionalExpenses.filter((e) => e.reimbursementStatus === "pending").length;
   const complete = professionalExpenses.filter((e) => e.reimbursementStatus === "complete").length;
 

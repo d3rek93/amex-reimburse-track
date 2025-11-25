@@ -13,6 +13,7 @@ const Stats = () => {
   const { toast } = useToast();
   const [session, setSession] = useState<Session | null>(null);
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [reimbursements, setReimbursements] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -39,14 +40,20 @@ const Stats = () => {
 
   const loadExpenses = async () => {
     try {
-      const { data, error } = await supabase
-        .from('expenses')
-        .select('*')
-        .order('date', { ascending: false });
+      const [expensesResult, reimbursementsResult] = await Promise.all([
+        supabase
+          .from('expenses')
+          .select('*')
+          .order('date', { ascending: false }),
+        supabase
+          .from('reimbursements')
+          .select('*')
+      ]);
 
-      if (error) throw error;
+      if (expensesResult.error) throw expensesResult.error;
+      if (reimbursementsResult.error) throw reimbursementsResult.error;
 
-      const formattedExpenses: Expense[] = data.map((expense) => ({
+      const formattedExpenses: Expense[] = expensesResult.data.map((expense) => ({
         id: expense.id,
         date: expense.date,
         description: expense.description,
@@ -62,11 +69,12 @@ const Stats = () => {
       }));
 
       setExpenses(formattedExpenses);
+      setReimbursements(reimbursementsResult.data || []);
     } catch (error) {
-      console.error('Error loading expenses:', error);
+      console.error('Error loading data:', error);
       toast({
         title: "Erreur",
-        description: "Impossible de charger les dépenses",
+        description: "Impossible de charger les données",
         variant: "destructive",
       });
     } finally {
@@ -96,7 +104,7 @@ const Stats = () => {
             Vue d'ensemble de vos dépenses professionnelles
           </p>
         </div>
-        <ExpenseStats expenses={expenses} />
+        <ExpenseStats expenses={expenses} reimbursements={reimbursements} />
       </div>
     </div>
   );
