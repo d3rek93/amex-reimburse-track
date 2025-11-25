@@ -164,42 +164,94 @@ const Reimbursements = ({ embedded = false }: ReimbursementsProps = {}) => {
 
       if (error) throw error;
 
-      // Build logical groups of expenses based on shared expense_number arrays (excluding personal expenses)
-      const groupTotals: Record<string, { expenseNumbers: string[]; totalExpenseAmount: number }> = {};
-      const numberToGroup: Record<string, string> = {};
+      // Build logical groups of expense numbers using connected components (excluding personal expenses)
+      const numberGraph: Record<string, Set<string>> = {};
 
+      // First pass: build graph connections between expense numbers that appear together
       (allExpenses || []).forEach((exp) => {
-        if (exp.is_personal) return;
+        if (exp.is_personal || !exp.expense_number) return;
 
         const numbers = Array.isArray(exp.expense_number)
           ? exp.expense_number.filter(Boolean)
-          : exp.expense_number
-            ? [exp.expense_number]
-            : [];
+          : [exp.expense_number];
 
         if (numbers.length === 0) return;
 
-        const sortedNumbers = [...numbers].sort();
-        const groupKey = sortedNumbers.join('|');
+        numbers.forEach((num) => {
+          if (!numberGraph[num]) numberGraph[num] = new Set();
+          numbers.forEach((other) => {
+            if (other !== num) {
+              numberGraph[num].add(other);
+            }
+          });
+        });
+      });
+
+      // Second pass: find connected components (each component is a logical expense group)
+      const visited = new Set<string>();
+      const groupTotals: Record<string, { expenseNumbers: string[]; totalExpenseAmount: number }> = {};
+      const numberToGroup: Record<string, string> = {};
+
+      const buildComponent = (start: string): string[] => {
+        const stack = [start];
+        const component: string[] = [];
+
+        while (stack.length) {
+          const current = stack.pop()!;
+          if (visited.has(current)) continue;
+          visited.add(current);
+          component.push(current);
+
+          const neighbors = numberGraph[current];
+          if (neighbors) {
+            neighbors.forEach((neighbor) => {
+              if (!visited.has(neighbor)) stack.push(neighbor);
+            });
+          }
+        }
+
+        return component.sort();
+      };
+
+      Object.keys(numberGraph).forEach((num) => {
+        if (visited.has(num)) return;
+        const component = buildComponent(num);
+        const groupKey = component.join('|');
+
+        groupTotals[groupKey] = {
+          expenseNumbers: component,
+          totalExpenseAmount: 0,
+        };
+
+        component.forEach((n) => {
+          numberToGroup[n] = groupKey;
+        });
+      });
+
+      // Third pass: accumulate expense amounts per logical group
+      (allExpenses || []).forEach((exp) => {
+        if (exp.is_personal || !exp.expense_number) return;
+
+        const numbers = Array.isArray(exp.expense_number)
+          ? exp.expense_number.filter(Boolean)
+          : [exp.expense_number];
+
+        if (numbers.length === 0) return;
+
+        const groupKey = numberToGroup[numbers[0]] || numbers.sort().join('|');
 
         if (!groupTotals[groupKey]) {
           groupTotals[groupKey] = {
-            expenseNumbers: sortedNumbers,
+            expenseNumbers: Array.from(new Set(numbers)).sort(),
             totalExpenseAmount: 0,
           };
         }
 
         groupTotals[groupKey].totalExpenseAmount += exp.amount_eur;
-
-        numbers.forEach((num) => {
-          numberToGroup[num] = groupKey;
-        });
       });
 
       setExpenseGroupTotals(groupTotals);
       setExpenseNumberToGroupKey(numberToGroup);
-
-      // Group reimbursements by expense_number for display and associated expenses mapping
       const expenseNumbers = new Set(reimbursementsList.map((r) => r.expense_number));
       const groupData: Record<string, GroupExpenseData> = {};
       const expensesMap: Record<string, AssociatedExpense[]> = {};
