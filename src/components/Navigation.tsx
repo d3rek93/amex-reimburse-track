@@ -20,7 +20,9 @@ export const Navigation = ({ onUpload }: NavigationProps) => {
   };
 
   const menuItems = [
-    { to: "/", label: "Vue combinée", icon: Receipt },
+    { to: "/", label: "Vue combinée", icon: Receipt, allowToggle: true },
+    { to: "/expenses", label: "Dépenses", icon: Receipt },
+    { to: "/reimbursements", label: "Remboursements", icon: DollarSign },
     { to: "/stats", label: "Statistiques", icon: BarChart3 },
   ];
 
@@ -43,7 +45,7 @@ export const Navigation = ({ onUpload }: NavigationProps) => {
               <NavLink
                 key={item.to}
                 to={item.to}
-                end
+                end={item.to === "/" || !item.allowToggle}
                 className="px-4 py-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex items-center gap-2"
                 activeClassName="text-foreground bg-muted font-medium"
               >
@@ -76,7 +78,7 @@ export const Navigation = ({ onUpload }: NavigationProps) => {
                   <NavLink
                     key={item.to}
                     to={item.to}
-                    end
+                    end={item.to === "/" || !item.allowToggle}
                     className="px-4 py-3 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex items-center gap-3"
                     activeClassName="text-foreground bg-muted font-medium"
                     onClick={() => setOpen(false)}
