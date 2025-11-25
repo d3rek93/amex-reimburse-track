@@ -12,32 +12,115 @@ export const ExpenseStats = ({ expenses, reimbursements }: ExpenseStatsProps) =>
   
   // Filter out cancelled reimbursements
   const activeReimbursements = reimbursements.filter((r) => r.status !== 'cancelled');
-  
-  // Calculate actual discrepancy amounts for approved discrepancies
-  const discrepancyApprovedTotal = reimbursements
-    .filter((r) => r.discrepancy_approved)
-    .reduce((sum, r) => {
-      // Find all expenses with matching expense_number
-      const relatedExpenses = professionalExpenses.filter((e) => {
-        if (!e.expenseNumber) return false;
-        const numbers = Array.isArray(e.expenseNumber) ? e.expenseNumber : [e.expenseNumber];
-        return numbers.includes(r.expense_number);
+
+  // --- Calcul des écarts approuvés (par groupe logique) ---
+  // 1) Construire les groupes logiques de numéros de notes à partir des dépenses (comme sur la page remboursements)
+  const numberGraph: Record<string, Set<string>> = {};
+
+  professionalExpenses.forEach((exp) => {
+    if (!exp.expenseNumber) return;
+
+    const numbers = Array.isArray(exp.expenseNumber)
+      ? exp.expenseNumber.filter(Boolean)
+      : [exp.expenseNumber];
+
+    if (numbers.length === 0) return;
+
+    numbers.forEach((num) => {
+      if (!numberGraph[num]) numberGraph[num] = new Set();
+      numbers.forEach((other) => {
+        if (other !== num) {
+          numberGraph[num].add(other);
+        }
       });
-      
-      // Calculate total expenses for this group
-      const totalExpenses = relatedExpenses.reduce((s, e) => s + e.amountEur, 0);
-      
-      // Find all reimbursements with the same expense_number
-      const relatedReimbursements = activeReimbursements.filter(
-        (reim) => reim.expense_number === r.expense_number
-      );
-      const totalReimbursements = relatedReimbursements.reduce((s, reim) => s + reim.amount_eur, 0);
-      
-      // Calculate the discrepancy (difference)
-      const discrepancy = Math.abs(totalExpenses - totalReimbursements);
-      
-      return sum + discrepancy;
-    }, 0);
+    });
+  });
+
+  // 2) Trouver les composantes connexes = groupes logiques
+  const visited = new Set<string>();
+  const groupTotals: Record<string, { expenseNumbers: string[]; totalExpenseAmount: number }> = {};
+  const numberToGroup: Record<string, string> = {};
+
+  const buildComponent = (start: string): string[] => {
+    const stack = [start];
+    const component: string[] = [];
+
+    while (stack.length) {
+      const current = stack.pop()!;
+      if (visited.has(current)) continue;
+      visited.add(current);
+      component.push(current);
+
+      const neighbors = numberGraph[current];
+      if (neighbors) {
+        neighbors.forEach((neighbor) => {
+          if (!visited.has(neighbor)) stack.push(neighbor);
+        });
+      }
+    }
+
+    return component.sort();
+  };
+
+  Object.keys(numberGraph).forEach((num) => {
+    if (visited.has(num)) return;
+    const component = buildComponent(num);
+    const groupKey = component.join('|');
+
+    groupTotals[groupKey] = {
+      expenseNumbers: component,
+      totalExpenseAmount: 0,
+    };
+
+    component.forEach((n) => {
+      numberToGroup[n] = groupKey;
+    });
+  });
+
+  // 3) Additionner les montants de dépenses par groupe logique
+  professionalExpenses.forEach((exp) => {
+    if (!exp.expenseNumber) return;
+
+    const numbers = Array.isArray(exp.expenseNumber)
+      ? exp.expenseNumber.filter(Boolean)
+      : [exp.expenseNumber];
+
+    if (numbers.length === 0) return;
+
+    const groupKey = numberToGroup[numbers[0]] || numbers.sort().join('|');
+
+    if (!groupTotals[groupKey]) {
+      groupTotals[groupKey] = {
+        expenseNumbers: Array.from(new Set(numbers)).sort(),
+        totalExpenseAmount: 0,
+      };
+    }
+
+    groupTotals[groupKey].totalExpenseAmount += exp.amountEur;
+  });
+
+  // 4) Calculer les totaux de remboursements par groupe logique, uniquement pour les écarts approuvés
+  const reimbursementsByGroupKeyApproved = new Map<string, number>();
+
+  activeReimbursements
+    .filter((r) => r.discrepancy_approved)
+    .forEach((r) => {
+      const groupKey = numberToGroup[r.expense_number] || r.expense_number;
+      const current = reimbursementsByGroupKeyApproved.get(groupKey) || 0;
+      reimbursementsByGroupKeyApproved.set(groupKey, current + r.amount_eur);
+    });
+
+  // 5) Somme des écarts signés (remboursements - dépenses) sur tous les groupes approuvés
+  const discrepancyApprovedTotal = Array.from(reimbursementsByGroupKeyApproved.entries()).reduce(
+    (sum, [groupKey, totalReimbursement]) => {
+      const groupInfo = groupTotals[groupKey];
+      if (!groupInfo) return sum;
+
+      const diff = totalReimbursement - groupInfo.totalExpenseAmount;
+      return sum + diff;
+    },
+    0
+  );
   
   // Calculate total reimbursed from active reimbursements only
   const totalReimbursed = activeReimbursements.reduce((sum, r) => sum + r.amount_eur, 0);
