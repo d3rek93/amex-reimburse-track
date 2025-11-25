@@ -13,9 +13,31 @@ export const ExpenseStats = ({ expenses, reimbursements }: ExpenseStatsProps) =>
   // Filter out cancelled reimbursements
   const activeReimbursements = reimbursements.filter((r) => r.status !== 'cancelled');
   
-  // Count discrepancy approved reimbursements
-  const discrepancyApprovedReimbursements = reimbursements.filter((r) => r.discrepancy_approved);
-  const discrepancyApprovedTotal = discrepancyApprovedReimbursements.reduce((sum, r) => sum + r.amount_eur, 0);
+  // Calculate actual discrepancy amounts for approved discrepancies
+  const discrepancyApprovedTotal = reimbursements
+    .filter((r) => r.discrepancy_approved)
+    .reduce((sum, r) => {
+      // Find all expenses with matching expense_number
+      const relatedExpenses = professionalExpenses.filter((e) => {
+        if (!e.expenseNumber) return false;
+        const numbers = Array.isArray(e.expenseNumber) ? e.expenseNumber : [e.expenseNumber];
+        return numbers.includes(r.expense_number);
+      });
+      
+      // Calculate total expenses for this group
+      const totalExpenses = relatedExpenses.reduce((s, e) => s + e.amountEur, 0);
+      
+      // Find all reimbursements with the same expense_number
+      const relatedReimbursements = activeReimbursements.filter(
+        (reim) => reim.expense_number === r.expense_number
+      );
+      const totalReimbursements = relatedReimbursements.reduce((s, reim) => s + reim.amount_eur, 0);
+      
+      // Calculate the discrepancy (difference)
+      const discrepancy = Math.abs(totalExpenses - totalReimbursements);
+      
+      return sum + discrepancy;
+    }, 0);
   
   // Calculate total reimbursed from active reimbursements only
   const totalReimbursed = activeReimbursements.reduce((sum, r) => sum + r.amount_eur, 0);
