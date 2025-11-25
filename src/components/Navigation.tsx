@@ -20,8 +20,7 @@ export const Navigation = ({ onUpload }: NavigationProps) => {
   };
 
   const menuItems = [
-    { to: "/", label: "Dépenses", icon: Receipt },
-    { to: "/reimbursements", label: "Remboursements", icon: DollarSign },
+    { to: "/", label: "Vue combinée", icon: Receipt },
     { to: "/stats", label: "Statistiques", icon: BarChart3 },
   ];
 
