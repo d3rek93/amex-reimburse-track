@@ -88,6 +88,8 @@ const Reimbursements = ({ embedded = false }: ReimbursementsProps = {}) => {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [associatedExpenses, setAssociatedExpenses] = useState<Record<string, AssociatedExpense[]>>({});
   const [groupExpenseData, setGroupExpenseData] = useState<Record<string, GroupExpenseData>>({});
+  const [expenseNumberToGroupKey, setExpenseNumberToGroupKey] = useState<Record<string, string>>({});
+  const [expenseGroupTotals, setExpenseGroupTotals] = useState<Record<string, { expenseNumbers: string[]; totalExpenseAmount: number }>>({});
   const [manualExpenseDialog, setManualExpenseDialog] = useState<{
     open: boolean;
     reimbursement: Reimbursement | null;
@@ -160,19 +162,56 @@ const Reimbursements = ({ embedded = false }: ReimbursementsProps = {}) => {
 
       if (error) throw error;
 
-      // Group reimbursements by expense_number
-      const expenseNumbers = new Set(reimbursementsList.map(r => r.expense_number));
+      // Build logical groups of expenses based on shared expense_number arrays (excluding personal expenses)
+      const groupTotals: Record<string, { expenseNumbers: string[]; totalExpenseAmount: number }> = {};
+      const numberToGroup: Record<string, string> = {};
+
+      (allExpenses || []).forEach((exp) => {
+        if (exp.is_personal) return;
+
+        const numbers = Array.isArray(exp.expense_number)
+          ? exp.expense_number.filter(Boolean)
+          : exp.expense_number
+            ? [exp.expense_number]
+            : [];
+
+        if (numbers.length === 0) return;
+
+        const sortedNumbers = [...numbers].sort();
+        const groupKey = sortedNumbers.join('|');
+
+        if (!groupTotals[groupKey]) {
+          groupTotals[groupKey] = {
+            expenseNumbers: sortedNumbers,
+            totalExpenseAmount: 0,
+          };
+        }
+
+        groupTotals[groupKey].totalExpenseAmount += exp.amount_eur;
+
+        numbers.forEach((num) => {
+          numberToGroup[num] = groupKey;
+        });
+      });
+
+      setExpenseGroupTotals(groupTotals);
+      setExpenseNumberToGroupKey(numberToGroup);
+
+      // Group reimbursements by expense_number for display and associated expenses mapping
+      const expenseNumbers = new Set(reimbursementsList.map((r) => r.expense_number));
       const groupData: Record<string, GroupExpenseData> = {};
       const expensesMap: Record<string, AssociatedExpense[]> = {};
 
       // For each expense number, find matching expenses (excluding personal expenses)
-      expenseNumbers.forEach(expenseNumber => {
-        const matchingExpenses = (allExpenses || []).filter(exp => 
-          !exp.is_personal && (
-            Array.isArray(exp.expense_number) 
-              ? exp.expense_number.includes(expenseNumber)
-              : exp.expense_number === expenseNumber
-          )
+      expenseNumbers.forEach((expenseNumber) => {
+        const matchingExpenses = (allExpenses || []).filter(
+          (exp) =>
+            !exp.is_personal &&
+            (
+              Array.isArray(exp.expense_number)
+                ? exp.expense_number.includes(expenseNumber)
+                : exp.expense_number === expenseNumber
+            ),
         );
 
         const totalExpenseAmount = matchingExpenses.reduce((sum, exp) => sum + exp.amount_eur, 0);
@@ -183,7 +222,7 @@ const Reimbursements = ({ embedded = false }: ReimbursementsProps = {}) => {
         };
 
         // Also store by first reimbursement ID for easy access
-        const firstReimbursement = reimbursementsList.find(r => r.expense_number === expenseNumber);
+        const firstReimbursement = reimbursementsList.find((r) => r.expense_number === expenseNumber);
         if (firstReimbursement && matchingExpenses.length > 0) {
           expensesMap[firstReimbursement.id] = matchingExpenses;
         }
@@ -339,35 +378,40 @@ const Reimbursements = ({ embedded = false }: ReimbursementsProps = {}) => {
   const unmatchedReimbursements = reimbursements.filter(r => !r.matched_expense_id && r.status !== 'cancelled');
   const cancelledReimbursements = reimbursements.filter(r => r.status === 'cancelled');
   
-  // Group all reimbursements to calculate discrepancies (excluding cancelled reimbursements)
-  const tempGrouped = new Map<string, number>();
-  reimbursements.filter(r => r.status !== 'cancelled').forEach(r => {
-    const current = tempGrouped.get(r.expense_number) || 0;
-    tempGrouped.set(r.expense_number, current + r.amount_eur);
-  });
-  
-  // Calculate reimbursements with discrepancies (by expense_number group)
-  const expenseNumbersWithDiscrepancy = new Set<string>();
-  tempGrouped.forEach((totalReimbursement, expenseNumber) => {
-    const groupData = groupExpenseData[expenseNumber];
-    if (groupData && groupData.expenses.length > 0) {
-      const hasDiscrepancy = Math.abs(groupData.totalExpenseAmount - totalReimbursement) > 0.01;
+  // Group reimbursements by logical expense group (based on shared expense numbers) to calculate discrepancies
+  const reimbursementsByGroupKey = new Map<string, number>();
+  reimbursements
+    .filter((r) => r.status !== 'cancelled')
+    .forEach((r) => {
+      const groupKey = expenseNumberToGroupKey[r.expense_number] || r.expense_number;
+      const current = reimbursementsByGroupKey.get(groupKey) || 0;
+      reimbursementsByGroupKey.set(groupKey, current + r.amount_eur);
+    });
+
+  // Calculate which logical groups have discrepancies
+  const groupKeysWithDiscrepancy = new Set<string>();
+  reimbursementsByGroupKey.forEach((totalReimbursement, groupKey) => {
+    const groupInfo = expenseGroupTotals[groupKey];
+    if (groupInfo) {
+      const hasDiscrepancy = Math.abs(groupInfo.totalExpenseAmount - totalReimbursement) > 0.01;
       if (hasDiscrepancy) {
-        expenseNumbersWithDiscrepancy.add(expenseNumber);
+        groupKeysWithDiscrepancy.add(groupKey);
       }
     }
   });
   
-  const reimbursementsWithDiscrepancy = reimbursements.filter(r => 
-    expenseNumbersWithDiscrepancy.has(r.expense_number)
-  );
+  const reimbursementsWithDiscrepancy = reimbursements.filter((r) => {
+    const groupKey = expenseNumberToGroupKey[r.expense_number] || r.expense_number;
+    return groupKeysWithDiscrepancy.has(groupKey);
+  });
 
   const filteredReimbursements = reimbursements.filter((reimbursement) => {
     // Apply status filters
     const isMatched = !!reimbursement.matched_expense_id && reimbursement.status !== 'cancelled';
     const isCancelled = reimbursement.status === 'cancelled';
     const isUnmatched = !reimbursement.matched_expense_id && reimbursement.status !== 'cancelled';
-    const hasDiscrepancy = expenseNumbersWithDiscrepancy.has(reimbursement.expense_number);
+    const groupKey = expenseNumberToGroupKey[reimbursement.expense_number] || reimbursement.expense_number;
+    const hasDiscrepancy = groupKeysWithDiscrepancy.has(groupKey);
     
     const statusMatch = 
       (showUnmatched && isUnmatched) ||
@@ -523,12 +567,13 @@ const Reimbursements = ({ embedded = false }: ReimbursementsProps = {}) => {
                   const isExpanded = expandedReimbursements.has(firstReimbursement.id);
                   const expenses = associatedExpenses[firstReimbursement.id] || [];
                   
-                  // Use total reimbursements for this expense number (all non-cancelled)
-                  const groupData = groupExpenseData[group.expense_number];
-                  const totalReimbursementForGroup = tempGrouped.get(group.expense_number) || 0;
-                  const hasAmountMismatch = groupData && 
-                    groupData.expenses.length > 0 && 
-                    Math.abs(groupData.totalExpenseAmount - totalReimbursementForGroup) > 0.01;
+                  // Use totals at logical group level (all related expense numbers together)
+                  const groupKeyForRow = expenseNumberToGroupKey[group.expense_number] || group.expense_number;
+                  const groupInfo = expenseGroupTotals[groupKeyForRow];
+                  const totalReimbursementForGroup = reimbursementsByGroupKey.get(groupKeyForRow) || 0;
+                  const hasAmountMismatch =
+                    !!groupInfo &&
+                    Math.abs(groupInfo.totalExpenseAmount - totalReimbursementForGroup) > 0.01;
                   
                   const rowClassName = hasMultiple 
                     ? "font-semibold" + (hasAmountMismatch ? " bg-orange-50 dark:bg-orange-950/20 hover:bg-orange-100 dark:hover:bg-orange-950/30" : "")
@@ -563,9 +608,9 @@ const Reimbursements = ({ embedded = false }: ReimbursementsProps = {}) => {
                         <TableCell className="text-right font-medium">
                           <div className="flex items-center justify-end gap-2">
                             <span>{group.total_amount.toFixed(2)} €</span>
-                            {hasAmountMismatch && groupData && (
+                            {hasAmountMismatch && groupInfo && (
                               <Badge variant="outline" className="bg-orange-500 text-white border-orange-600">
-                                Δ {(totalReimbursementForGroup - groupData.totalExpenseAmount).toFixed(2)} €
+                                Δ {(totalReimbursementForGroup - groupInfo.totalExpenseAmount).toFixed(2)} €
                               </Badge>
                             )}
                           </div>
