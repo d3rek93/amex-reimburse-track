@@ -13,6 +13,10 @@ export const ExpenseStats = ({ expenses, reimbursements }: ExpenseStatsProps) =>
   // Filter out cancelled reimbursements
   const activeReimbursements = reimbursements.filter((r) => r.status !== 'cancelled');
   
+  // Count discrepancy approved reimbursements
+  const discrepancyApprovedReimbursements = reimbursements.filter((r) => r.discrepancy_approved);
+  const discrepancyApprovedTotal = discrepancyApprovedReimbursements.reduce((sum, r) => sum + r.amount_eur, 0);
+  
   // Calculate total reimbursed from active reimbursements only
   const totalReimbursed = activeReimbursements.reduce((sum, r) => sum + r.amount_eur, 0);
   
@@ -51,11 +55,11 @@ export const ExpenseStats = ({ expenses, reimbursements }: ExpenseStatsProps) =>
       bgColor: "bg-warning/10",
     },
     {
-      label: "Transactions",
-      value: `${complete} / ${professionalExpenses.length}`,
-      icon: XCircle,
-      color: "text-muted-foreground",
-      bgColor: "bg-muted",
+      label: "Écarts approuvés",
+      value: `${discrepancyApprovedTotal.toFixed(2)} €`,
+      icon: CheckCircle,
+      color: "text-info",
+      bgColor: "bg-info/10",
     },
   ];
 
