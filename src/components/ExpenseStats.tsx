@@ -1,6 +1,7 @@
 import { Card } from "@/components/ui/card";
 import { Expense } from "./ExpenseTable";
-import { TrendingUp, Clock, CheckCircle, XCircle } from "lucide-react";
+import { TrendingUp, Clock, CheckCircle } from "lucide-react";
+import { ExpenseCharts } from "./ExpenseCharts";
 
 interface ExpenseStatsProps {
   expenses: Expense[];
@@ -182,10 +183,10 @@ export const ExpenseStats = ({ expenses, reimbursements }: ExpenseStatsProps) =>
   ];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map((stat, index) => (
-          <Card key={index} className="p-6">
+          <Card key={index} className="p-6 hover:shadow-lg transition-shadow">
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-sm text-muted-foreground mb-1">{stat.label}</p>
@@ -198,6 +199,8 @@ export const ExpenseStats = ({ expenses, reimbursements }: ExpenseStatsProps) =>
           </Card>
         ))}
       </div>
+      
+      <ExpenseCharts expenses={expenses} reimbursements={reimbursements} />
       
       <Card className="p-6">
         <h3 className="text-lg font-semibold mb-4">Dépenses par source</h3>
