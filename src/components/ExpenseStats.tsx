@@ -130,13 +130,25 @@ export const ExpenseStats = ({ expenses, reimbursements }: ExpenseStatsProps) =>
   const pending = professionalExpenses.filter((e) => e.reimbursementStatus === "pending").length;
   const complete = professionalExpenses.filter((e) => e.reimbursementStatus === "complete").length;
 
-  // Calculate totals by source
-  const amexTotal = professionalExpenses
-    .filter((e) => e.source === "AMEX")
-    .reduce((sum, e) => sum + e.amountEur, 0);
-  const boursobankTotal = professionalExpenses
-    .filter((e) => e.source === "Boursobank")
-    .reduce((sum, e) => sum + e.amountEur, 0);
+  // Calculate totals by source dynamically
+  const sourceMap = new Map<string, { total: number; count: number }>();
+  
+  professionalExpenses.forEach((expense) => {
+    const source = expense.source || "Non spécifié";
+    const current = sourceMap.get(source) || { total: 0, count: 0 };
+    sourceMap.set(source, {
+      total: current.total + expense.amountEur,
+      count: current.count + 1,
+    });
+  });
+
+  const sourceStats = Array.from(sourceMap.entries())
+    .map(([source, data]) => ({
+      label: source,
+      value: `${data.total.toFixed(2)} €`,
+      count: data.count,
+    }))
+    .sort((a, b) => b.count - a.count);
 
   const stats = [
     {
@@ -169,19 +181,6 @@ export const ExpenseStats = ({ expenses, reimbursements }: ExpenseStatsProps) =>
     },
   ];
 
-  const sourceStats = [
-    {
-      label: "AMEX",
-      value: `${amexTotal.toFixed(2)} €`,
-      count: professionalExpenses.filter((e) => e.source === "AMEX").length,
-    },
-    {
-      label: "Boursobank",
-      value: `${boursobankTotal.toFixed(2)} €`,
-      count: professionalExpenses.filter((e) => e.source === "Boursobank").length,
-    },
-  ];
-
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -204,7 +203,7 @@ export const ExpenseStats = ({ expenses, reimbursements }: ExpenseStatsProps) =>
       
       <Card className="p-6">
         <h3 className="text-lg font-semibold mb-4">Dépenses par source</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {sourceStats.map((source, index) => (
             <div key={index} className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
               <div>
