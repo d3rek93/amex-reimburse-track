@@ -36,29 +36,31 @@ export const ExpenseCharts = ({ expenses, reimbursements }: ExpenseChartsProps) 
       Remboursements: parseFloat(item.reimbursements.toFixed(2)),
     }));
 
-  // Source breakdown
-  const sourceData = [
-    {
-      name: "AMEX",
-      value: professionalExpenses
-        .filter((e) => e.source === "AMEX")
-        .reduce((sum, e) => sum + e.amountEur, 0),
-    },
-    {
-      name: "Boursobank",
-      value: professionalExpenses
-        .filter((e) => e.source === "Boursobank")
-        .reduce((sum, e) => sum + e.amountEur, 0),
-    },
-    {
-      name: "Manuel",
-      value: professionalExpenses
-        .filter((e) => e.source === "Manuel")
-        .reduce((sum, e) => sum + e.amountEur, 0),
-    },
-  ].filter((item) => item.value > 0);
+  // Source breakdown - dynamically build from all sources
+  const sourceMap = new Map<string, number>();
+  
+  professionalExpenses.forEach((expense) => {
+    const source = expense.source || "Non spécifié";
+    const current = sourceMap.get(source) || 0;
+    sourceMap.set(source, current + expense.amountEur);
+  });
 
-  const COLORS = ['hsl(var(--primary))', 'hsl(var(--success))', 'hsl(var(--info))'];
+  const sourceData = Array.from(sourceMap.entries())
+    .map(([name, value]) => ({ name, value }))
+    .filter((item) => item.value > 0)
+    .sort((a, b) => b.value - a.value);
+
+  const COLORS = [
+    'hsl(var(--primary))', 
+    'hsl(var(--success))', 
+    'hsl(var(--info))',
+    'hsl(var(--warning))',
+    'hsl(var(--chart-1))',
+    'hsl(var(--chart-2))',
+    'hsl(var(--chart-3))',
+    'hsl(var(--chart-4))',
+    'hsl(var(--chart-5))'
+  ];
 
   // Status breakdown
   const statusData = [
