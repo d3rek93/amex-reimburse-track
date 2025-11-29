@@ -109,17 +109,16 @@ export const ExpenseCharts = ({ expenses, reimbursements }: ExpenseChartsProps) 
         {/* Source breakdown */}
         <Card className="p-6">
           <h3 className="text-lg font-semibold mb-4">Répartition par source</h3>
-          <ResponsiveContainer width="100%" height={250}>
+          <ResponsiveContainer width="100%" height={300}>
             <PieChart>
               <Pie
                 data={sourceData}
                 cx="50%"
                 cy="50%"
-                labelLine={false}
-                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                outerRadius={80}
+                outerRadius={90}
                 fill="hsl(var(--primary))"
                 dataKey="value"
+                label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
               >
                 {sourceData.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -132,6 +131,11 @@ export const ExpenseCharts = ({ expenses, reimbursements }: ExpenseChartsProps) 
                   borderRadius: "var(--radius)",
                 }}
                 formatter={(value: number) => `${value.toFixed(2)} €`}
+              />
+              <Legend 
+                verticalAlign="bottom" 
+                height={36}
+                formatter={(value) => value}
               />
             </PieChart>
           </ResponsiveContainer>
