@@ -26,8 +26,8 @@ export const AdvanceBalanceCard = ({
   const [dialogOpen, setDialogOpen] = useState(false);
 
   // Calculate current balance
-  // Initial advance - personal expenses - professional expenses (up to previous month) + reimbursements - approved discrepancies + manual transfers
-  const currentBalance = initialAdvance - personalExpenses - professionalExpenses + reimbursementsReceived - approvedDiscrepancies + manualTransfers;
+  // Initial advance - personal expenses - professional expenses (up to previous month) + reimbursements + approved discrepancies + manual transfers
+  const currentBalance = initialAdvance - personalExpenses - professionalExpenses + reimbursementsReceived + approvedDiscrepancies + manualTransfers;
   const isHealthy = currentBalance >= initialAdvance;
 
   return (
@@ -86,7 +86,7 @@ export const AdvanceBalanceCard = ({
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-muted-foreground">Écarts approuvés</span>
-                <span className="font-medium text-red-600">-{approvedDiscrepancies.toFixed(2)} €</span>
+                <span className="font-medium text-green-600">+{approvedDiscrepancies.toFixed(2)} €</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-muted-foreground">Virements manuels</span>
