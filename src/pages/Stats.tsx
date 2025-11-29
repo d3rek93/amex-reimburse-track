@@ -14,6 +14,7 @@ const Stats = () => {
   const [session, setSession] = useState<Session | null>(null);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [reimbursements, setReimbursements] = useState<any[]>([]);
+  const [manualTransfers, setManualTransfers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -40,18 +41,23 @@ const Stats = () => {
 
   const loadExpenses = async () => {
     try {
-      const [expensesResult, reimbursementsResult] = await Promise.all([
+      const [expensesResult, reimbursementsResult, transfersResult] = await Promise.all([
         supabase
           .from('expenses')
           .select('*')
           .order('date', { ascending: false }),
         supabase
           .from('reimbursements')
+          .select('*'),
+        supabase
+          .from('manual_transfers')
           .select('*')
+          .order('transfer_date', { ascending: false })
       ]);
 
       if (expensesResult.error) throw expensesResult.error;
       if (reimbursementsResult.error) throw reimbursementsResult.error;
+      if (transfersResult.error) throw transfersResult.error;
 
       const formattedExpenses: Expense[] = expensesResult.data.map((expense) => ({
         id: expense.id,
@@ -70,6 +76,7 @@ const Stats = () => {
 
       setExpenses(formattedExpenses);
       setReimbursements(reimbursementsResult.data || []);
+      setManualTransfers(transfersResult.data || []);
     } catch (error) {
       console.error('Error loading data:', error);
       toast({
@@ -104,7 +111,12 @@ const Stats = () => {
             Vue d'ensemble de vos dépenses professionnelles
           </p>
         </div>
-        <ExpenseStats expenses={expenses} reimbursements={reimbursements} />
+        <ExpenseStats 
+          expenses={expenses} 
+          reimbursements={reimbursements}
+          manualTransfers={manualTransfers}
+          onTransferAdded={loadExpenses}
+        />
       </div>
     </div>
   );

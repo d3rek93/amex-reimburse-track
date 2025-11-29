@@ -71,6 +71,36 @@ export type Database = {
         }
         Relationships: []
       }
+      manual_transfers: {
+        Row: {
+          amount_eur: number
+          created_at: string
+          description: string | null
+          id: string
+          transfer_date: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount_eur: number
+          created_at?: string
+          description?: string | null
+          id?: string
+          transfer_date: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount_eur?: number
+          created_at?: string
+          description?: string | null
+          id?: string
+          transfer_date?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       reimbursements: {
         Row: {
           amount_eur: number
