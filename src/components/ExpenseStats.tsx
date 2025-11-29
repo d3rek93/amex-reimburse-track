@@ -2,13 +2,16 @@ import { Card } from "@/components/ui/card";
 import { Expense } from "./ExpenseTable";
 import { TrendingUp, Clock, CheckCircle } from "lucide-react";
 import { ExpenseCharts } from "./ExpenseCharts";
+import { AdvanceBalanceCard } from "./AdvanceBalanceCard";
 
 interface ExpenseStatsProps {
   expenses: Expense[];
   reimbursements: any[];
+  manualTransfers: any[];
+  onTransferAdded: () => void;
 }
 
-export const ExpenseStats = ({ expenses, reimbursements }: ExpenseStatsProps) => {
+export const ExpenseStats = ({ expenses, reimbursements, manualTransfers, onTransferAdded }: ExpenseStatsProps) => {
   const professionalExpenses = expenses.filter((e) => !e.isPersonal);
   
   // Filter out cancelled reimbursements
@@ -181,8 +184,30 @@ export const ExpenseStats = ({ expenses, reimbursements }: ExpenseStatsProps) =>
     },
   ];
 
+  // Calculate advance balance components
+  const INITIAL_ADVANCE = 1500;
+  const totalPersonalExpenses = expenses
+    .filter(e => e.isPersonal)
+    .reduce((sum, e) => sum + e.amountEur, 0);
+  
+  const totalReimbursementsReceived = activeReimbursements
+    .reduce((sum, r) => sum + r.amount_eur, 0);
+  
+  const totalManualTransfers = manualTransfers
+    .reduce((sum, t) => sum + t.amount_eur, 0);
+
   return (
     <div className="space-y-6">
+      {/* Advance Balance Card */}
+      <AdvanceBalanceCard
+        initialAdvance={INITIAL_ADVANCE}
+        personalExpenses={totalPersonalExpenses}
+        reimbursementsReceived={totalReimbursementsReceived}
+        approvedDiscrepancies={discrepancyApprovedTotal}
+        manualTransfers={totalManualTransfers}
+        onTransferAdded={onTransferAdded}
+      />
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map((stat, index) => (
           <Card key={index} className="p-6 hover:shadow-lg transition-shadow">
