@@ -7,6 +7,7 @@ import { ManualTransferDialog } from "./ManualTransferDialog";
 interface AdvanceBalanceCardProps {
   initialAdvance: number;
   personalExpenses: number;
+  professionalExpenses: number;
   reimbursementsReceived: number;
   approvedDiscrepancies: number;
   manualTransfers: number;
@@ -16,6 +17,7 @@ interface AdvanceBalanceCardProps {
 export const AdvanceBalanceCard = ({
   initialAdvance,
   personalExpenses,
+  professionalExpenses,
   reimbursementsReceived,
   approvedDiscrepancies,
   manualTransfers,
@@ -24,8 +26,8 @@ export const AdvanceBalanceCard = ({
   const [dialogOpen, setDialogOpen] = useState(false);
 
   // Calculate current balance
-  // Initial advance - personal expenses (which shouldn't touch the advance) + reimbursements - approved discrepancies + manual transfers
-  const currentBalance = initialAdvance - personalExpenses + reimbursementsReceived - approvedDiscrepancies + manualTransfers;
+  // Initial advance - personal expenses - professional expenses (up to previous month) + reimbursements - approved discrepancies + manual transfers
+  const currentBalance = initialAdvance - personalExpenses - professionalExpenses + reimbursementsReceived - approvedDiscrepancies + manualTransfers;
   const isHealthy = currentBalance >= initialAdvance;
 
   return (
@@ -73,6 +75,10 @@ export const AdvanceBalanceCard = ({
               <div className="flex justify-between items-center">
                 <span className="text-muted-foreground">Dépenses personnelles</span>
                 <span className="font-medium text-red-600">-{personalExpenses.toFixed(2)} €</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground">Dépenses professionnelles (jusqu'au mois précédent)</span>
+                <span className="font-medium text-red-600">-{professionalExpenses.toFixed(2)} €</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-muted-foreground">Remboursements reçus</span>
