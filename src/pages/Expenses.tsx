@@ -1137,16 +1137,17 @@ const Expenses = ({ embedded = false }: ExpensesProps = {}) => {
     const matchesStartDate = !startDate || expenseDate >= new Date(startDate);
     const matchesEndDate = !endDate || expenseDate <= new Date(endDate);
 
-    // Personal filter: show only if checkbox is checked
+    // Personal filter: show only personal expenses if checkbox is checked
     const matchesPersonal = !showPersonal || expense.isPersonal;
     
     // Status filter: show only if at least one checkbox is checked AND matches
     // If no status checkboxes are checked, show all
+    // When status filters are active, exclude personal expenses (they can't be reimbursed)
     const hasAnyStatusFilter = showPending || showPartial || showComplete;
     const matchesStatus = !hasAnyStatusFilter || 
-      (showPending && expense.reimbursementStatus === "pending") ||
-      (showPartial && expense.reimbursementStatus === "partial") ||
-      (showComplete && expense.reimbursementStatus === "complete");
+      (showPending && expense.reimbursementStatus === "pending" && !expense.isPersonal) ||
+      (showPartial && expense.reimbursementStatus === "partial" && !expense.isPersonal) ||
+      (showComplete && expense.reimbursementStatus === "complete" && !expense.isPersonal);
 
     return matchesSearch && matchesStartDate && matchesEndDate && matchesPersonal && matchesStatus;
   });
