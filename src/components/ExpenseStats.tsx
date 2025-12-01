@@ -190,22 +190,8 @@ export const ExpenseStats = ({ expenses, reimbursements, manualTransfers, onTran
     .filter(e => e.isPersonal)
     .reduce((sum, e) => sum + e.amountEur, 0);
   
-  const totalReimbursementsReceived = activeReimbursements
-    .reduce((sum, r) => sum + r.amount_eur, 0);
-  
   const totalManualTransfers = manualTransfers
     .reduce((sum, t) => sum + t.amount_eur, 0);
-
-  // Calculate professional expenses up to last day of previous month
-  const now = new Date();
-  const lastDayOfPreviousMonth = new Date(now.getFullYear(), now.getMonth(), 0);
-  
-  const professionalExpensesUpToPreviousMonth = professionalExpenses
-    .filter(e => {
-      const expenseDate = new Date(e.date);
-      return expenseDate <= lastDayOfPreviousMonth;
-    })
-    .reduce((sum, e) => sum + e.amountEur, 0);
 
   return (
     <div className="space-y-6">
@@ -213,8 +199,6 @@ export const ExpenseStats = ({ expenses, reimbursements, manualTransfers, onTran
       <AdvanceBalanceCard
         initialAdvance={INITIAL_ADVANCE}
         personalExpenses={totalPersonalExpenses}
-        professionalExpenses={professionalExpensesUpToPreviousMonth}
-        reimbursementsReceived={totalReimbursementsReceived}
         approvedDiscrepancies={discrepancyApprovedTotal}
         manualTransfers={totalManualTransfers}
         onTransferAdded={onTransferAdded}

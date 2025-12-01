@@ -7,8 +7,6 @@ import { ManualTransferDialog } from "./ManualTransferDialog";
 interface AdvanceBalanceCardProps {
   initialAdvance: number;
   personalExpenses: number;
-  professionalExpenses: number;
-  reimbursementsReceived: number;
   approvedDiscrepancies: number;
   manualTransfers: number;
   onTransferAdded: () => void;
@@ -17,17 +15,14 @@ interface AdvanceBalanceCardProps {
 export const AdvanceBalanceCard = ({
   initialAdvance,
   personalExpenses,
-  professionalExpenses,
-  reimbursementsReceived,
   approvedDiscrepancies,
   manualTransfers,
   onTransferAdded,
 }: AdvanceBalanceCardProps) => {
   const [dialogOpen, setDialogOpen] = useState(false);
 
-  // Calculate current balance
-  // Initial advance - personal expenses - professional expenses (up to previous month) + reimbursements + approved discrepancies + manual transfers
-  const currentBalance = initialAdvance - personalExpenses - professionalExpenses + reimbursementsReceived + approvedDiscrepancies + manualTransfers;
+  // Calculate current balance: Initial advance - personal expenses + manual transfers + approved discrepancies
+  const currentBalance = initialAdvance - personalExpenses + manualTransfers + approvedDiscrepancies;
   const isHealthy = currentBalance >= initialAdvance;
 
   return (
@@ -77,20 +72,12 @@ export const AdvanceBalanceCard = ({
                 <span className="font-medium text-red-600">-{personalExpenses.toFixed(2)} €</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">Dépenses professionnelles (jusqu'au mois précédent)</span>
-                <span className="font-medium text-red-600">-{professionalExpenses.toFixed(2)} €</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">Remboursements reçus</span>
-                <span className="font-medium text-green-600">+{reimbursementsReceived.toFixed(2)} €</span>
+                <span className="text-muted-foreground">Virements manuels</span>
+                <span className="font-medium text-green-600">+{manualTransfers.toFixed(2)} €</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-muted-foreground">Écarts approuvés</span>
                 <span className="font-medium text-green-600">+{approvedDiscrepancies.toFixed(2)} €</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">Virements manuels</span>
-                <span className="font-medium text-green-600">+{manualTransfers.toFixed(2)} €</span>
               </div>
             </div>
 
