@@ -45,7 +45,8 @@ interface Reimbursement {
 }
 
 interface ReimbursementGroup {
-  expense_number: string;
+  expense_number: string; // Display string (comma-separated if multiple)
+  groupKey: string; // Logical group key for lookups
   reimbursements: Reimbursement[];
   total_amount: number;
   payment_date: string;
@@ -417,20 +418,20 @@ const Reimbursements = ({ embedded = false }: ReimbursementsProps = {}) => {
     }
   };
 
-  const handleApproveDiscrepancy = async (expenseNumber: string, approved: boolean) => {
+  const handleApproveDiscrepancy = async (expenseNumbers: string[], approved: boolean) => {
     try {
-      // Update all reimbursements with this expense_number
+      // Update all reimbursements with any of these expense_numbers
       const { error } = await supabase
         .from('reimbursements')
         .update({ discrepancy_approved: approved })
-        .eq('expense_number', expenseNumber);
+        .in('expense_number', expenseNumbers);
 
       if (error) throw error;
 
       // Update local state
       setReimbursements((prev) =>
         prev.map((r) => 
-          r.expense_number === expenseNumber 
+          expenseNumbers.includes(r.expense_number)
             ? { ...r, discrepancy_approved: approved } 
             : r
         )
@@ -525,15 +526,17 @@ const Reimbursements = ({ embedded = false }: ReimbursementsProps = {}) => {
     return matchesSearch;
   });
 
-  // Group reimbursements by expense_number
+  // Group reimbursements by logical expense group (shared expenses)
   const groupedReimbursements = new Map<string, ReimbursementGroup>();
   
   filteredReimbursements.forEach((reimbursement) => {
-    const expenseNum = reimbursement.expense_number;
+    // Use the logical group key to group reimbursements that share the same expenses
+    const groupKey = expenseNumberToGroupKey[reimbursement.expense_number] || reimbursement.expense_number;
     
-    if (!groupedReimbursements.has(expenseNum)) {
-      groupedReimbursements.set(expenseNum, {
-        expense_number: expenseNum,
+    if (!groupedReimbursements.has(groupKey)) {
+      groupedReimbursements.set(groupKey, {
+        expense_number: reimbursement.expense_number,
+        groupKey: groupKey,
         reimbursements: [],
         total_amount: 0,
         payment_date: reimbursement.payment_date,
@@ -543,9 +546,14 @@ const Reimbursements = ({ embedded = false }: ReimbursementsProps = {}) => {
       });
     }
     
-    const group = groupedReimbursements.get(expenseNum)!;
+    const group = groupedReimbursements.get(groupKey)!;
     group.reimbursements.push(reimbursement);
     group.total_amount += reimbursement.amount_eur;
+    
+    // Collect all unique expense numbers in this group for display
+    if (!group.expense_number.includes(reimbursement.expense_number)) {
+      group.expense_number = [group.expense_number, reimbursement.expense_number].sort().join(', ');
+    }
     
     if (!reimbursement.matched_expense_id) {
       group.all_matched = false;
@@ -684,19 +692,21 @@ const Reimbursements = ({ embedded = false }: ReimbursementsProps = {}) => {
                 </TableRow>
               ) : (
                 reimbursementGroups.map((group) => {
-                  const isGroupExpanded = expandedGroups.has(group.expense_number);
+                  const isGroupExpanded = expandedGroups.has(group.groupKey);
                   const hasMultiple = group.reimbursements.length > 1;
                   const firstReimbursement = group.reimbursements[0];
                   const isExpanded = expandedReimbursements.has(firstReimbursement.id);
                   const expenses = associatedExpenses[firstReimbursement.id] || [];
                   
-                  // Use totals at logical group level (all related expense numbers together)
-                  const groupKeyForRow = expenseNumberToGroupKey[group.expense_number] || group.expense_number;
-                  const groupInfo = expenseGroupTotals[groupKeyForRow];
-                  const totalReimbursementForGroup = reimbursementsByGroupKey.get(groupKeyForRow) || 0;
+                  // Use the stored groupKey for lookups
+                  const groupInfo = expenseGroupTotals[group.groupKey];
+                  const totalReimbursementForGroup = reimbursementsByGroupKey.get(group.groupKey) || 0;
                   const hasAmountMismatch =
                     !!groupInfo &&
                     Math.abs(groupInfo.totalExpenseAmount - totalReimbursementForGroup) > 0.01;
+                  
+                  // Get all unique expense numbers from reimbursements in this group
+                  const allExpenseNumbers = [...new Set(group.reimbursements.map(r => r.expense_number))];
                   
                   const rowClassName = hasMultiple 
                     ? "font-semibold" + (hasAmountMismatch ? " bg-orange-50 dark:bg-orange-950/20 hover:bg-orange-100 dark:hover:bg-orange-950/30" : "")
@@ -705,7 +715,7 @@ const Reimbursements = ({ embedded = false }: ReimbursementsProps = {}) => {
                   return (
                     <>
                       {/* Main group row */}
-                      <TableRow key={`group-${group.expense_number}`} className={rowClassName}>
+                      <TableRow key={`group-${group.groupKey}`} className={rowClassName}>
                         <TableCell>
                           <div className="flex items-center gap-2">
                             {hasMultiple && (
@@ -713,7 +723,7 @@ const Reimbursements = ({ embedded = false }: ReimbursementsProps = {}) => {
                                 variant="ghost"
                                 size="sm"
                                 className="h-6 w-6 p-0"
-                                onClick={() => toggleGroupExpanded(group.expense_number)}
+                                onClick={() => toggleGroupExpanded(group.groupKey)}
                               >
                                 {isGroupExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                               </Button>
@@ -738,12 +748,12 @@ const Reimbursements = ({ embedded = false }: ReimbursementsProps = {}) => {
                                 </Badge>
                                 <div className="flex items-center gap-2 ml-2">
                                   <Checkbox
-                                    id={`approve-${group.expense_number}`}
+                                    id={`approve-${group.groupKey}`}
                                     checked={group.reimbursements[0].discrepancy_approved}
-                                    onCheckedChange={(checked) => handleApproveDiscrepancy(group.expense_number, checked as boolean)}
+                                    onCheckedChange={(checked) => handleApproveDiscrepancy(allExpenseNumbers, checked as boolean)}
                                   />
                                   <Label 
-                                    htmlFor={`approve-${group.expense_number}`} 
+                                    htmlFor={`approve-${group.groupKey}`} 
                                     className="cursor-pointer text-xs text-muted-foreground whitespace-nowrap"
                                   >
                                     Accepter l'écart
