@@ -103,7 +103,7 @@ const Stats = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <Navigation />
+      <Navigation onUpload={() => navigate('/expenses?openUpload=true')} />
       <div className="container mx-auto py-8 px-4">
         <div className="mb-8">
           <h1 className="text-3xl font-bold tracking-tight mb-2">Statistiques</h1>
