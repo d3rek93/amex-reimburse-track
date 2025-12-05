@@ -106,7 +106,7 @@ export const ExpenseCharts = ({ expenses, reimbursements }: ExpenseChartsProps) 
       </Card>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Source breakdown */}
+        {/* Source breakdown - Donut chart */}
         <Card className="p-6">
           <h3 className="text-lg font-semibold mb-4">Répartition par source</h3>
           <ResponsiveContainer width="100%" height={300}>
@@ -115,10 +115,12 @@ export const ExpenseCharts = ({ expenses, reimbursements }: ExpenseChartsProps) 
                 data={sourceData}
                 cx="50%"
                 cy="50%"
-                outerRadius={90}
+                innerRadius={70}
+                outerRadius={100}
                 fill="hsl(var(--primary))"
                 dataKey="value"
-                label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
+                strokeWidth={2}
+                stroke="hsl(var(--card))"
               >
                 {sourceData.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -137,6 +139,27 @@ export const ExpenseCharts = ({ expenses, reimbursements }: ExpenseChartsProps) 
                 height={36}
                 formatter={(value) => value}
               />
+              {/* Center label */}
+              <text
+                x="50%"
+                y="45%"
+                textAnchor="middle"
+                dominantBaseline="middle"
+                className="fill-foreground"
+                style={{ fontSize: '24px', fontWeight: 'bold' }}
+              >
+                {sourceData.reduce((acc, item) => acc + item.value, 0).toFixed(0)} €
+              </text>
+              <text
+                x="50%"
+                y="55%"
+                textAnchor="middle"
+                dominantBaseline="middle"
+                className="fill-muted-foreground"
+                style={{ fontSize: '12px' }}
+              >
+                Total dépenses
+              </text>
             </PieChart>
           </ResponsiveContainer>
         </Card>
