@@ -43,7 +43,7 @@ const Dashboard = () => {
 
   return (
     <div className="min-h-screen w-full bg-background">
-      <Navigation />
+      <Navigation onUpload={() => navigate('/expenses?openUpload=true')} />
       
       {isMobile ? (
         <div className="p-4">

@@ -42,15 +42,24 @@ const Expenses = ({ embedded = false }: ExpensesProps = {}) => {
   const [highlightedExpenseId, setHighlightedExpenseId] = useState<string | null>(null);
 
   useEffect(() => {
-    // Check for expense parameter in URL
+    // Check for URL parameters
     const params = new URLSearchParams(window.location.search);
     const expenseId = params.get('expense');
+    const openUpload = params.get('openUpload');
+    
     if (expenseId) {
       setHighlightedExpenseId(expenseId);
-      // Clear URL parameter
-      window.history.replaceState({}, '', window.location.pathname);
       // Clear highlight after 3 seconds
       setTimeout(() => setHighlightedExpenseId(null), 3000);
+    }
+    
+    if (openUpload === 'true') {
+      setShowUploadDialog(true);
+    }
+    
+    // Clear URL parameters
+    if (expenseId || openUpload) {
+      window.history.replaceState({}, '', window.location.pathname);
     }
   }, []);
 
