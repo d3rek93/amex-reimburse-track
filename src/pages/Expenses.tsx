@@ -172,6 +172,11 @@ const Expenses = ({ embedded = false }: ExpensesProps = {}) => {
           // Collect transfers to add
           const transfers: { date: string; amount: number; description: string }[] = [];
           
+          // Get header to find categoryParent column index
+          const headerLine = lines[0];
+          const headerColumns = headerLine.split(';').map(col => col.replace(/^"?|"?$/g, '').trim());
+          const categoryParentIndex = headerColumns.findIndex(h => h === 'categoryParent');
+          
           expenses = dataLines.map(line => {
             const columns = line.split(';').map(col => col.replace(/^"?|"?$/g, '').trim());
             
@@ -181,15 +186,29 @@ const Expenses = ({ embedded = false }: ExpensesProps = {}) => {
             const label = columns[2];
             const amountStr = columns[6];
             const accountLabel = columns[9];
+            const categoryParent = categoryParentIndex >= 0 ? columns[categoryParentIndex] : '';
             
-            // Check for transfers from BoursoBank
-            if (label === 'VIR Virement depuis BoursoBank') {
+            // Check for internal credit movements (transfers in)
+            if (categoryParent === 'Mouvements internes créditeurs') {
               const amount = parseFloat(amountStr.replace(',', '.'));
-              if (!isNaN(amount) && amount > 0) {
+              if (!isNaN(amount)) {
                 transfers.push({
                   date: dateOp,
-                  amount: amount,
-                  description: 'Virement Boursobank',
+                  amount: Math.abs(amount),
+                  description: 'Virement entrant Boursobank',
+                });
+              }
+              return null;
+            }
+            
+            // Check for internal debit movements (transfers out - negative)
+            if (categoryParent === 'Mouvements internes débiteurs') {
+              const amount = parseFloat(amountStr.replace(',', '.'));
+              if (!isNaN(amount)) {
+                transfers.push({
+                  date: dateOp,
+                  amount: -Math.abs(amount),
+                  description: 'Virement sortant Boursobank',
                 });
               }
               return null;
