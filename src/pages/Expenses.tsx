@@ -172,10 +172,11 @@ const Expenses = ({ embedded = false }: ExpensesProps = {}) => {
           // Collect transfers to add
           const transfers: { date: string; amount: number; description: string }[] = [];
           
-          // Get header to find categoryParent column index
+          // Get header to find categoryParent and category column indices
           const headerLine = lines[0];
           const headerColumns = headerLine.split(';').map(col => col.replace(/^"?|"?$/g, '').trim());
           const categoryParentIndex = headerColumns.findIndex(h => h === 'categoryParent');
+          const categoryIndex = headerColumns.findIndex(h => h === 'category');
           
           expenses = dataLines.map(line => {
             const columns = line.split(';').map(col => col.replace(/^"?|"?$/g, '').trim());
@@ -187,6 +188,12 @@ const Expenses = ({ embedded = false }: ExpensesProps = {}) => {
             const amountStr = columns[6];
             const accountLabel = columns[9];
             const categoryParent = categoryParentIndex >= 0 ? columns[categoryParentIndex] : '';
+            const category = categoryIndex >= 0 ? columns[categoryIndex] : '';
+            
+            // Exclude deferred debit card transactions
+            if (category === 'Prélèvements cartes débit différé et cartes crédit conso') {
+              return null;
+            }
             
             // Check for internal credit movements (transfers in)
             if (categoryParent === 'Mouvements internes créditeurs') {
