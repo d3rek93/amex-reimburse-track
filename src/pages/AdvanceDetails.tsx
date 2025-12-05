@@ -333,8 +333,8 @@ const AdvanceDetails = () => {
                       <TableRow key={transfer.id}>
                         <TableCell>{format(new Date(transfer.transfer_date), 'dd MMM yyyy', { locale: fr })}</TableCell>
                         <TableCell>{transfer.description || '-'}</TableCell>
-                        <TableCell className="text-right font-medium text-green-600">
-                          +{transfer.amount_eur.toFixed(2)} €
+                        <TableCell className={`text-right font-medium ${transfer.amount_eur >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {transfer.amount_eur >= 0 ? '+' : ''}{transfer.amount_eur.toFixed(2)} €
                         </TableCell>
                         <TableCell>
                           <AlertDialog>
