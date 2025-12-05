@@ -197,7 +197,7 @@ const Expenses = ({ embedded = false }: ExpensesProps = {}) => {
             
             // Check for internal credit movements (transfers in)
             if (categoryParent === 'Mouvements internes créditeurs') {
-              const amount = parseFloat(amountStr.replace(',', '.'));
+              const amount = parseFloat(amountStr.replace(/\s/g, '').replace(',', '.'));
               if (!isNaN(amount)) {
                 transfers.push({
                   date: dateOp,
@@ -210,7 +210,7 @@ const Expenses = ({ embedded = false }: ExpensesProps = {}) => {
             
             // Check for internal debit movements (transfers out - negative)
             if (categoryParent === 'Mouvements internes débiteurs') {
-              const amount = parseFloat(amountStr.replace(',', '.'));
+              const amount = parseFloat(amountStr.replace(/\s/g, '').replace(',', '.'));
               if (!isNaN(amount)) {
                 transfers.push({
                   date: dateOp,
