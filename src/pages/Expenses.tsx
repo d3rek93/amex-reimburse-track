@@ -169,6 +169,9 @@ const Expenses = ({ embedded = false }: ExpensesProps = {}) => {
         if (isBoursobank) {
           const dataLines = lines.slice(1).filter(line => line.trim());
           
+          // Collect transfers to add
+          const transfers: { date: string; amount: number; description: string }[] = [];
+          
           expenses = dataLines.map(line => {
             const columns = line.split(';').map(col => col.replace(/^"?|"?$/g, '').trim());
             
@@ -178,6 +181,19 @@ const Expenses = ({ embedded = false }: ExpensesProps = {}) => {
             const label = columns[2];
             const amountStr = columns[6];
             const accountLabel = columns[9];
+            
+            // Check for transfers from BoursoBank
+            if (label === 'VIR Virement depuis BoursoBank') {
+              const amount = parseFloat(amountStr.replace(',', '.'));
+              if (!isNaN(amount) && amount > 0) {
+                transfers.push({
+                  date: dateOp,
+                  amount: amount,
+                  description: 'Virement Boursobank',
+                });
+              }
+              return null;
+            }
             
             // Include VISA ULTIM CARTE transactions and any transaction with "orange" in label
             const isVisaUltim = accountLabel === 'VISA ULTIM' && label.startsWith('CARTE');
@@ -203,6 +219,41 @@ const Expenses = ({ embedded = false }: ExpensesProps = {}) => {
               source: source,
             };
           }).filter(Boolean);
+          
+          // Insert transfers if any (check for duplicates)
+          if (transfers.length > 0) {
+            const { data: existingTransfers } = await supabase
+              .from('manual_transfers')
+              .select('transfer_date, amount_eur, description');
+            
+            const uniqueTransfers = transfers.filter(t => {
+              return !existingTransfers?.some(existing => 
+                existing.transfer_date === t.date &&
+                Math.abs(existing.amount_eur - t.amount) < 0.01 &&
+                existing.description === t.description
+              );
+            });
+            
+            if (uniqueTransfers.length > 0) {
+              const { error: transferError } = await supabase
+                .from('manual_transfers')
+                .insert(uniqueTransfers.map(t => ({
+                  user_id: sessionData.session.user.id,
+                  transfer_date: t.date,
+                  amount_eur: t.amount,
+                  description: t.description,
+                })));
+              
+              if (transferError) {
+                console.error('Error inserting transfers:', transferError);
+              } else {
+                toast({
+                  title: "Virements importés",
+                  description: `${uniqueTransfers.length} virement(s) Boursobank importé(s)`,
+                });
+              }
+            }
+          }
         } else {
           const dataLines = lines.slice(1).filter(line => line.trim());
           

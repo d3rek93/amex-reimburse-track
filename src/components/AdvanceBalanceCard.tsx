@@ -72,7 +72,7 @@ export const AdvanceBalanceCard = ({
                 <span className="font-medium text-red-600">-{personalExpenses.toFixed(2)} €</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-muted-foreground">Virements manuels</span>
+                <span className="text-muted-foreground">Virements</span>
                 <span className="font-medium text-green-600">+{manualTransfers.toFixed(2)} €</span>
               </div>
               <div className="flex justify-between items-center">
