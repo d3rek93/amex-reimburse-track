@@ -2,7 +2,7 @@ import { useState } from "react";
 import { NavLink } from "@/components/NavLink";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { Menu, FileText, LogOut, BarChart3, Receipt, Upload, DollarSign, LayoutGrid, SplitSquareVertical } from "lucide-react";
+import { Menu, FileText, LogOut, BarChart3, Receipt, Upload, DollarSign, LayoutGrid, SplitSquareVertical, Wallet } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate, useLocation } from "react-router-dom";
 
@@ -32,6 +32,7 @@ export const Navigation = ({ onUpload }: NavigationProps) => {
   const menuItems = [
     { to: "/expenses", label: "Dépenses", icon: Receipt, hideInCombined: true },
     { to: "/reimbursements", label: "Remboursements", icon: DollarSign, hideInCombined: true },
+    { to: "/advance", label: "Avance", icon: Wallet, hideInCombined: false },
     { to: "/stats", label: "Statistiques", icon: BarChart3, hideInCombined: false },
   ];
 
