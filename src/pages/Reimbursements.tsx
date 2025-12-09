@@ -3,8 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Navigation } from "@/components/Navigation";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Trash2, ChevronDown, ChevronRight, Unlink2, Search, Plus, ArrowUpDown } from "lucide-react";
+import { Loader2, Trash2, ChevronDown, ChevronRight, Unlink2, Search, Plus, ArrowUpDown, Calendar, Filter } from "lucide-react";
 import { Session } from "@supabase/supabase-js";
+import { startOfMonth, endOfMonth, subMonths, startOfYear, format } from "date-fns";
 import {
   Table,
   TableBody,
@@ -75,6 +76,8 @@ interface ReimbursementsProps {
   embedded?: boolean;
 }
 
+type QuickFilterType = "current" | "previous" | "3months" | "6months" | "year" | null;
+
 const Reimbursements = ({ embedded = false }: ReimbursementsProps = {}) => {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -87,6 +90,8 @@ const Reimbursements = ({ embedded = false }: ReimbursementsProps = {}) => {
   const [showCancelled, setShowCancelled] = useState(false);
   const [showDiscrepancyApproved, setShowDiscrepancyApproved] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [expandedReimbursements, setExpandedReimbursements] = useState<Set<string>>(new Set());
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [associatedExpenses, setAssociatedExpenses] = useState<Record<string, AssociatedExpense[]>>({});
@@ -98,6 +103,68 @@ const Reimbursements = ({ embedded = false }: ReimbursementsProps = {}) => {
     reimbursement: Reimbursement | null;
   }>({ open: false, reimbursement: null });
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+
+  const getActiveQuickFilter = (): QuickFilterType => {
+    const today = new Date();
+    const currentMonthStart = format(startOfMonth(today), "yyyy-MM-dd");
+    const currentMonthEnd = format(endOfMonth(today), "yyyy-MM-dd");
+    const prevMonthStart = format(startOfMonth(subMonths(today, 1)), "yyyy-MM-dd");
+    const prevMonthEnd = format(endOfMonth(subMonths(today, 1)), "yyyy-MM-dd");
+    const threeMonthsStart = format(startOfMonth(subMonths(today, 2)), "yyyy-MM-dd");
+    const sixMonthsStart = format(startOfMonth(subMonths(today, 5)), "yyyy-MM-dd");
+    const yearStart = format(startOfYear(today), "yyyy-MM-dd");
+
+    if (startDate === currentMonthStart && endDate === currentMonthEnd) return "current";
+    if (startDate === prevMonthStart && endDate === prevMonthEnd) return "previous";
+    if (startDate === threeMonthsStart && endDate === currentMonthEnd) return "3months";
+    if (startDate === sixMonthsStart && endDate === currentMonthEnd) return "6months";
+    if (startDate === yearStart && endDate === currentMonthEnd) return "year";
+    return null;
+  };
+
+  const applyQuickFilter = (filter: QuickFilterType) => {
+    const today = new Date();
+    const currentMonthEnd = format(endOfMonth(today), "yyyy-MM-dd");
+
+    switch (filter) {
+      case "current":
+        setStartDate(format(startOfMonth(today), "yyyy-MM-dd"));
+        setEndDate(currentMonthEnd);
+        break;
+      case "previous":
+        setStartDate(format(startOfMonth(subMonths(today, 1)), "yyyy-MM-dd"));
+        setEndDate(format(endOfMonth(subMonths(today, 1)), "yyyy-MM-dd"));
+        break;
+      case "3months":
+        setStartDate(format(startOfMonth(subMonths(today, 2)), "yyyy-MM-dd"));
+        setEndDate(currentMonthEnd);
+        break;
+      case "6months":
+        setStartDate(format(startOfMonth(subMonths(today, 5)), "yyyy-MM-dd"));
+        setEndDate(currentMonthEnd);
+        break;
+      case "year":
+        setStartDate(format(startOfYear(today), "yyyy-MM-dd"));
+        setEndDate(currentMonthEnd);
+        break;
+    }
+  };
+
+  const resetFilters = () => {
+    setStartDate("");
+    setEndDate("");
+    setSearchQuery("");
+  };
+
+  const activeFilter = getActiveQuickFilter();
+
+  const quickFilters = [
+    { key: "current" as const, label: "Ce mois" },
+    { key: "previous" as const, label: "Mois précédent" },
+    { key: "3months" as const, label: "3 derniers mois" },
+    { key: "6months" as const, label: "6 derniers mois" },
+    { key: "year" as const, label: "Cette année" },
+  ];
 
   useEffect(() => {
     if (embedded) {
@@ -502,6 +569,10 @@ const Reimbursements = ({ embedded = false }: ReimbursementsProps = {}) => {
   });
 
   const filteredReimbursements = reimbursements.filter((reimbursement) => {
+    // Apply date filters
+    if (startDate && reimbursement.payment_date < startDate) return false;
+    if (endDate && reimbursement.payment_date > endDate) return false;
+
     // Apply status filters
     const isMatched = !!reimbursement.matched_expense_id && reimbursement.status !== 'cancelled';
     const isCancelled = reimbursement.status === 'cancelled';
@@ -589,19 +660,57 @@ const Reimbursements = ({ embedded = false }: ReimbursementsProps = {}) => {
         )}
 
         <div className="space-y-4">
-          <div className="flex items-center gap-6 bg-card p-4 rounded-lg border">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Rechercher par référence, n° note ou catégorie..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
-              />
+          <div className="bg-card p-4 rounded-lg border space-y-4">
+            {/* Quick date filters */}
+            <div className="flex flex-wrap gap-2">
+              {quickFilters.map((filter) => (
+                <Button
+                  key={filter.key}
+                  variant={activeFilter === filter.key ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => applyQuickFilter(filter.key)}
+                  className="text-xs"
+                >
+                  {filter.label}
+                </Button>
+              ))}
+            </div>
+
+            {/* Search and date filters */}
+            <div className="flex flex-col md:flex-row gap-4">
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Rechercher par référence, n° note ou catégorie..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+              <div className="flex gap-2 items-center">
+                <Calendar className="h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-40"
+                />
+                <span className="text-muted-foreground">-</span>
+                <Input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="w-40"
+                />
+              </div>
+              <Button variant="outline" onClick={resetFilters}>
+                <Filter className="h-4 w-4 mr-2" />
+                Réinitialiser
+              </Button>
             </div>
           </div>
           
-          <div className="flex items-center gap-6 bg-card p-4 rounded-lg border">
+          <div className="flex flex-wrap items-center gap-4 bg-card p-4 rounded-lg border">
             <div className="flex items-center gap-2">
               <Checkbox
                 id="show-unmatched"
