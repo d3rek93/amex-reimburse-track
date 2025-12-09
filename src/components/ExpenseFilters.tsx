@@ -4,6 +4,7 @@ import { Search, Calendar, Filter } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { startOfMonth, endOfMonth, subMonths, startOfYear, format } from "date-fns";
 
 interface ExpenseFiltersProps {
   searchQuery: string;
@@ -23,6 +24,8 @@ interface ExpenseFiltersProps {
   onReset: () => void;
 }
 
+type QuickFilterType = "current" | "previous" | "3months" | "6months" | "year" | null;
+
 export const ExpenseFilters = ({
   searchQuery,
   onSearchChange,
@@ -40,9 +43,80 @@ export const ExpenseFilters = ({
   onShowCompleteChange,
   onReset,
 }: ExpenseFiltersProps) => {
+  const getActiveQuickFilter = (): QuickFilterType => {
+    const today = new Date();
+    const currentMonthStart = format(startOfMonth(today), "yyyy-MM-dd");
+    const currentMonthEnd = format(endOfMonth(today), "yyyy-MM-dd");
+    const prevMonthStart = format(startOfMonth(subMonths(today, 1)), "yyyy-MM-dd");
+    const prevMonthEnd = format(endOfMonth(subMonths(today, 1)), "yyyy-MM-dd");
+    const threeMonthsStart = format(startOfMonth(subMonths(today, 2)), "yyyy-MM-dd");
+    const sixMonthsStart = format(startOfMonth(subMonths(today, 5)), "yyyy-MM-dd");
+    const yearStart = format(startOfYear(today), "yyyy-MM-dd");
+
+    if (startDate === currentMonthStart && endDate === currentMonthEnd) return "current";
+    if (startDate === prevMonthStart && endDate === prevMonthEnd) return "previous";
+    if (startDate === threeMonthsStart && endDate === currentMonthEnd) return "3months";
+    if (startDate === sixMonthsStart && endDate === currentMonthEnd) return "6months";
+    if (startDate === yearStart && endDate === currentMonthEnd) return "year";
+    return null;
+  };
+
+  const applyQuickFilter = (filter: QuickFilterType) => {
+    const today = new Date();
+    const currentMonthEnd = format(endOfMonth(today), "yyyy-MM-dd");
+
+    switch (filter) {
+      case "current":
+        onStartDateChange(format(startOfMonth(today), "yyyy-MM-dd"));
+        onEndDateChange(currentMonthEnd);
+        break;
+      case "previous":
+        onStartDateChange(format(startOfMonth(subMonths(today, 1)), "yyyy-MM-dd"));
+        onEndDateChange(format(endOfMonth(subMonths(today, 1)), "yyyy-MM-dd"));
+        break;
+      case "3months":
+        onStartDateChange(format(startOfMonth(subMonths(today, 2)), "yyyy-MM-dd"));
+        onEndDateChange(currentMonthEnd);
+        break;
+      case "6months":
+        onStartDateChange(format(startOfMonth(subMonths(today, 5)), "yyyy-MM-dd"));
+        onEndDateChange(currentMonthEnd);
+        break;
+      case "year":
+        onStartDateChange(format(startOfYear(today), "yyyy-MM-dd"));
+        onEndDateChange(currentMonthEnd);
+        break;
+    }
+  };
+
+  const activeFilter = getActiveQuickFilter();
+
+  const quickFilters = [
+    { key: "current" as const, label: "Ce mois" },
+    { key: "previous" as const, label: "Mois précédent" },
+    { key: "3months" as const, label: "3 derniers mois" },
+    { key: "6months" as const, label: "6 derniers mois" },
+    { key: "year" as const, label: "Cette année" },
+  ];
+
   return (
     <Card className="p-4">
       <div className="flex flex-col gap-4">
+        {/* Quick filters */}
+        <div className="flex flex-wrap gap-2">
+          {quickFilters.map((filter) => (
+            <Button
+              key={filter.key}
+              variant={activeFilter === filter.key ? "default" : "outline"}
+              size="sm"
+              onClick={() => applyQuickFilter(filter.key)}
+              className="text-xs"
+            >
+              {filter.label}
+            </Button>
+          ))}
+        </div>
+
         <div className="flex flex-col md:flex-row gap-4">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
