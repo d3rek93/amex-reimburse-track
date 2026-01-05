@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      balance_references: {
+        Row: {
+          amount_eur: number
+          created_at: string
+          id: string
+          reference_date: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount_eur: number
+          created_at?: string
+          id?: string
+          reference_date: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount_eur?: number
+          created_at?: string
+          id?: string
+          reference_date?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       expenses: {
         Row: {
           amount_eur: number

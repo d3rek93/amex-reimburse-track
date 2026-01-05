@@ -15,6 +15,7 @@ const Stats = () => {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [reimbursements, setReimbursements] = useState<any[]>([]);
   const [manualTransfers, setManualTransfers] = useState<any[]>([]);
+  const [balanceReference, setBalanceReference] = useState<{ amount_eur: number; reference_date: string } | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -41,7 +42,7 @@ const Stats = () => {
 
   const loadExpenses = async () => {
     try {
-      const [expensesResult, reimbursementsResult, transfersResult] = await Promise.all([
+      const [expensesResult, reimbursementsResult, transfersResult, balanceRefResult] = await Promise.all([
         supabase
           .from('expenses')
           .select('*')
@@ -52,12 +53,16 @@ const Stats = () => {
         supabase
           .from('manual_transfers')
           .select('*')
-          .order('transfer_date', { ascending: false })
+          .order('transfer_date', { ascending: false }),
+        supabase
+          .from('balance_references')
+          .select('amount_eur, reference_date')
+          .maybeSingle()
       ]);
 
       if (expensesResult.error) throw expensesResult.error;
       if (reimbursementsResult.error) throw reimbursementsResult.error;
-      if (transfersResult.error) throw transfersResult.error;
+      if (balanceRefResult.error) throw balanceRefResult.error;
 
       const formattedExpenses: Expense[] = expensesResult.data.map((expense) => ({
         id: expense.id,
@@ -77,6 +82,7 @@ const Stats = () => {
       setExpenses(formattedExpenses);
       setReimbursements(reimbursementsResult.data || []);
       setManualTransfers(transfersResult.data || []);
+      setBalanceReference(balanceRefResult.data);
     } catch (error) {
       console.error('Error loading data:', error);
       toast({
@@ -115,7 +121,9 @@ const Stats = () => {
           expenses={expenses} 
           reimbursements={reimbursements}
           manualTransfers={manualTransfers}
+          balanceReference={balanceReference}
           onTransferAdded={loadExpenses}
+          onBalanceReferenceUpdated={loadExpenses}
         />
       </div>
     </div>

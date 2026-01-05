@@ -4,14 +4,21 @@ import { TrendingUp, Clock, CheckCircle } from "lucide-react";
 import { ExpenseCharts } from "./ExpenseCharts";
 import { AdvanceBalanceCard } from "./AdvanceBalanceCard";
 
+interface BalanceReference {
+  amount_eur: number;
+  reference_date: string;
+}
+
 interface ExpenseStatsProps {
   expenses: Expense[];
   reimbursements: any[];
   manualTransfers: any[];
+  balanceReference: BalanceReference | null;
   onTransferAdded: () => void;
+  onBalanceReferenceUpdated: () => void;
 }
 
-export const ExpenseStats = ({ expenses, reimbursements, manualTransfers, onTransferAdded }: ExpenseStatsProps) => {
+export const ExpenseStats = ({ expenses, reimbursements, manualTransfers, balanceReference, onTransferAdded, onBalanceReferenceUpdated }: ExpenseStatsProps) => {
   const professionalExpenses = expenses.filter((e) => !e.isPersonal);
   
   // Filter out cancelled reimbursements
@@ -184,24 +191,30 @@ export const ExpenseStats = ({ expenses, reimbursements, manualTransfers, onTran
     },
   ];
 
-  // Calculate advance balance components
-  const INITIAL_ADVANCE = 1500;
-  const totalPersonalExpenses = expenses
-    .filter(e => e.isPersonal)
+  // Calculate advance balance components based on reference date
+  const TARGET_ADVANCE = 1500;
+  const referenceDate = balanceReference?.reference_date;
+  
+  // Filter personal expenses since reference date
+  const personalExpensesSinceRef = expenses
+    .filter(e => e.isPersonal && (!referenceDate || e.date >= referenceDate))
     .reduce((sum, e) => sum + e.amountEur, 0);
   
-  const totalManualTransfers = manualTransfers
+  // Filter manual transfers since reference date
+  const manualTransfersSinceRef = manualTransfers
+    .filter(t => !referenceDate || t.transfer_date >= referenceDate)
     .reduce((sum, t) => sum + t.amount_eur, 0);
 
   return (
     <div className="space-y-6">
       {/* Advance Balance Card */}
       <AdvanceBalanceCard
-        initialAdvance={INITIAL_ADVANCE}
-        personalExpenses={totalPersonalExpenses}
-        approvedDiscrepancies={discrepancyApprovedTotal}
-        manualTransfers={totalManualTransfers}
+        targetAdvance={TARGET_ADVANCE}
+        balanceReference={balanceReference}
+        personalExpensesSinceRef={personalExpensesSinceRef}
+        manualTransfersSinceRef={manualTransfersSinceRef}
         onTransferAdded={onTransferAdded}
+        onBalanceReferenceUpdated={onBalanceReferenceUpdated}
       />
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
