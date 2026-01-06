@@ -653,7 +653,10 @@ const Reimbursements = ({ embedded = false }: ReimbursementsProps = {}) => {
       group.expense_number = [group.expense_number, reimbursement.expense_number].sort().join(', ');
     }
     
-    if (!reimbursement.matched_expense_id) {
+    // A reimbursement is considered "matched" if it has a matched_expense_id
+    // OR if there are expenses associated via expense_number (for cancelled reimbursements)
+    const hasExpenseViaNumber = groupExpenseData[reimbursement.expense_number]?.expenses?.length > 0;
+    if (!reimbursement.matched_expense_id && !hasExpenseViaNumber) {
       group.all_matched = false;
     }
     
