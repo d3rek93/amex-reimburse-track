@@ -1017,11 +1017,17 @@ const Reimbursements = ({ embedded = false }: ReimbursementsProps = {}) => {
                             {reimbursement.amount_eur.toFixed(2)} €
                           </TableCell>
                           <TableCell>
-                            {reimbursement.matched_expense_id ? (
-                              <Badge variant="outline" className="text-xs">Associé</Badge>
-                            ) : (
-                              <Badge variant="outline" className="text-xs text-destructive">Non associé</Badge>
-                            )}
+                            {(() => {
+                              const hasExpenseViaNumber =
+                                (groupExpenseData[reimbursement.expense_number]?.expenses?.length || 0) > 0;
+                              const isAssociated = !!reimbursement.matched_expense_id || hasExpenseViaNumber;
+
+                              return isAssociated ? (
+                                <Badge variant="outline" className="text-xs">Associé</Badge>
+                              ) : (
+                                <Badge variant="outline" className="text-xs text-destructive">Non associé</Badge>
+                              );
+                            })()}
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-2">
