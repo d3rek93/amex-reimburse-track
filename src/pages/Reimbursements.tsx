@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Navigation } from "@/components/Navigation";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Trash2, ChevronDown, ChevronRight, Unlink2, Search, Plus, ArrowUpDown, Calendar, Filter } from "lucide-react";
+import { Loader2, Trash2, ChevronDown, ChevronRight, Unlink2, Search, Plus, ArrowUpDown, Calendar, Filter, RotateCcw } from "lucide-react";
 import { Session } from "@supabase/supabase-js";
 import { startOfMonth, endOfMonth, subMonths, startOfYear, format } from "date-fns";
 import {
@@ -520,6 +520,33 @@ const Reimbursements = ({ embedded = false }: ReimbursementsProps = {}) => {
     }
   };
 
+  const handleReactivateReimbursement = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('reimbursements')
+        .update({ status: 'active' })
+        .eq('id', id);
+
+      if (error) throw error;
+
+      setReimbursements((prev) =>
+        prev.map((r) => (r.id === id ? { ...r, status: 'active' } : r))
+      );
+
+      toast({
+        title: "Remboursement réactivé",
+        description: "Le remboursement a été remis en statut actif",
+      });
+    } catch (error) {
+      console.error('Error reactivating reimbursement:', error);
+      toast({
+        title: "Erreur",
+        description: "Impossible de réactiver le remboursement",
+        variant: "destructive",
+      });
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -874,7 +901,18 @@ const Reimbursements = ({ embedded = false }: ReimbursementsProps = {}) => {
                         </TableCell>
                         <TableCell>
                           {group.reimbursements[0].status === 'cancelled' ? (
-                            <Badge variant="secondary" className="bg-gray-400 text-white">Annulé</Badge>
+                            <div className="flex items-center gap-2">
+                              <Badge variant="secondary" className="bg-gray-400 text-white">Annulé</Badge>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 px-2"
+                                onClick={() => handleReactivateReimbursement(firstReimbursement.id)}
+                                title="Réactiver ce remboursement"
+                              >
+                                <RotateCcw className="h-3 w-3" />
+                              </Button>
+                            </div>
                           ) : group.all_matched ? (
                             <Button 
                               variant="link" 
