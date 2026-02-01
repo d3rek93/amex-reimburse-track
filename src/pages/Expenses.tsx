@@ -230,8 +230,8 @@ const Expenses = ({ embedded = false }: ExpensesProps = {}) => {
               return null;
             }
             
-            // Include VISA ULTIM CARTE transactions and any transaction with "orange" in label
-            const isVisaUltim = accountLabel === 'VISA ULTIM' && label.startsWith('CARTE');
+            // Include VISA ULTIM CARTE transactions (CARTE can be anywhere in label) and any transaction with "orange" in label
+            const isVisaUltim = accountLabel === 'VISA ULTIM' && label.toUpperCase().includes('CARTE');
             const isOrange = label.toLowerCase().includes('orange');
             
             if (!isVisaUltim && !isOrange) return null;
