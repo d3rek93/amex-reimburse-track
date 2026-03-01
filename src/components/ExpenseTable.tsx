@@ -34,6 +34,8 @@ interface ExpenseTableProps {
 export const ExpenseTable = ({ expenses, onUpdateExpense, onDeleteExpense, highlightedExpenseId }: ExpenseTableProps) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
+  const [editingAmountId, setEditingAmountId] = useState<string | null>(null);
+  const [editAmountValue, setEditAmountValue] = useState("");
   const [partialAmounts, setPartialAmounts] = useState<Record<string, number>>({});
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
 
@@ -183,7 +185,54 @@ export const ExpenseTable = ({ expenses, onUpdateExpense, onDeleteExpense, highl
               <TableCell>
                 {expense.conversionFees ? `${expense.conversionFees.toFixed(2)} €` : "-"}
               </TableCell>
-              <TableCell className="font-semibold">{expense.amountEur.toFixed(2)} €</TableCell>
+              <TableCell className="font-semibold">
+                {editingAmountId === expense.id ? (
+                  <div className="flex items-center gap-1">
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={editAmountValue}
+                      onChange={(e) => setEditAmountValue(e.target.value)}
+                      className="h-8 w-24"
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          const val = parseFloat(editAmountValue);
+                          if (!isNaN(val) && val >= 0) {
+                            onUpdateExpense(expense.id, { amountEur: val });
+                          }
+                          setEditingAmountId(null);
+                        } else if (e.key === 'Escape') {
+                          setEditingAmountId(null);
+                        }
+                      }}
+                    />
+                    <Button size="sm" variant="ghost" onClick={() => {
+                      const val = parseFloat(editAmountValue);
+                      if (!isNaN(val) && val >= 0) {
+                        onUpdateExpense(expense.id, { amountEur: val });
+                      }
+                      setEditingAmountId(null);
+                    }}>
+                      <Check className="h-4 w-4" />
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setEditingAmountId(null)}>
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <span
+                    className="cursor-pointer hover:underline"
+                    onClick={() => {
+                      setEditingAmountId(expense.id);
+                      setEditAmountValue(expense.amountEur.toString());
+                    }}
+                    title="Cliquer pour modifier"
+                  >
+                    {expense.amountEur.toFixed(2)} €
+                  </span>
+                )}
+              </TableCell>
               <TableCell>
                 {editingId === expense.id ? (
                   <div className="flex items-center gap-2">

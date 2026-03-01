@@ -545,6 +545,7 @@ const Expenses = ({ embedded = false }: ExpensesProps = {}) => {
         }
       }
       if (updates.consideredComplete !== undefined) dbUpdates.considered_complete = updates.consideredComplete;
+      if (updates.amountEur !== undefined) dbUpdates.amount_eur = updates.amountEur;
 
       const { error } = await supabase
         .from('expenses')
