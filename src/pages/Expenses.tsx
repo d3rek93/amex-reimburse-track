@@ -230,29 +230,34 @@ const Expenses = ({ embedded = false }: ExpensesProps = {}) => {
               return null;
             }
             
+            const rawAmount = parseFloat(amountStr.replace(/\s/g, '').replace(',', '.'));
+            if (isNaN(rawAmount)) return null;
+
+            const isRefund = rawAmount < 0;
+
             // Include VISA ULTIM CARTE transactions (CARTE can be anywhere in label) and any transaction with "orange" in label
             const isVisaUltim = accountLabel.toUpperCase().includes('ULTIM') && label.toUpperCase().includes('CARTE');
             const isOrange = label.toLowerCase().includes('orange');
-            
-            if (!isVisaUltim && !isOrange) return null;
-            
-            const amount = Math.abs(parseFloat(amountStr.replace(',', '.')));
-            
-            if (isNaN(amount)) return null;
-            
+
+            // Refunds (negative amounts) are always kept: card refunds (SNCF...) or credit transfers
+            if (!isVisaUltim && !isOrange && !isRefund) return null;
+
+            const amount = isRefund ? -Math.abs(rawAmount) : Math.abs(rawAmount);
+
             // Determine source based on description
             const source = label.toUpperCase().includes('PRLV') ? 'Prélèvement' : 'Boursobank';
-            
+
             return {
               user_id: sessionData.session.user.id,
               date: dateOp,
-              description: label,
+              description: isRefund ? `Remboursement - ${label}` : label,
               amount_eur: amount,
-              reimbursement_status: 'pending',
+              reimbursement_status: isRefund ? 'complete' : 'pending',
               reimbursed_amount: 0,
               is_personal: false,
               source: source,
             };
+
           }).filter(Boolean);
           
           // Insert transfers if any (check for duplicates)
