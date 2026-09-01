@@ -390,11 +390,11 @@ const AdvanceDetails = () => {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <ArrowDownCircle className="h-5 w-5 text-red-600" />
-                Dépenses personnelles ({personalExpenses.length})
+                Dépenses personnelles ({activePersonalExpenses.length})
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {personalExpenses.length === 0 ? (
+              {activePersonalExpenses.length === 0 ? (
                 <p className="text-muted-foreground text-center py-4">Aucune dépense personnelle</p>
               ) : (
                 <Table>
@@ -406,7 +406,7 @@ const AdvanceDetails = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {personalExpenses.map((expense) => (
+                    {activePersonalExpenses.map((expense) => (
                       <TableRow key={expense.id}>
                         <TableCell>{format(new Date(expense.date), 'dd MMM yyyy', { locale: fr })}</TableCell>
                         <TableCell className="max-w-[200px] truncate">{expense.description}</TableCell>
