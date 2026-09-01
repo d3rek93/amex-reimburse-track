@@ -308,23 +308,26 @@ const Expenses = ({ embedded = false }: ExpensesProps = {}) => {
             const [month, day, year] = dateStr.split('/');
             const date = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
             
-            const amount = Math.abs(parseFloat(amountStr));
-            
-            if (amountStr.startsWith('-')) return null;
-            
+            const rawAmount = parseFloat(amountStr.replace(/\s/g, ''));
+            if (isNaN(rawAmount)) return null;
+
+            const isRefund = amountStr.trim().startsWith('-') || rawAmount < 0;
+            const amount = isRefund ? -Math.abs(rawAmount) : Math.abs(rawAmount);
+
             // Determine source based on description
             const source = description.toUpperCase().includes('PRLV') ? 'Prélèvement' : 'AMEX';
-            
+
             return {
               user_id: sessionData.session.user.id,
               date,
-              description,
+              description: isRefund ? `Remboursement - ${description}` : description,
               amount_eur: amount,
-              reimbursement_status: 'pending',
+              reimbursement_status: isRefund ? 'complete' : 'pending',
               reimbursed_amount: 0,
               is_personal: false,
               source: source,
             };
+
           }).filter(Boolean);
         }
       } else if (file.name.endsWith('.xls') || file.name.endsWith('.xlsx')) {
