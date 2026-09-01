@@ -238,10 +238,28 @@ const AdvanceDetails = () => {
     }
   };
 
+  // Neutraliser les dépenses personnelles annulées/remboursées :
+  // chaque montant négatif (remboursement) annule une dépense de même montant absolu
+  const excludedIds = new Set<string>();
+  personalExpenses
+    .filter((e) => e.amount_eur < 0)
+    .forEach((refund) => {
+      excludedIds.add(refund.id);
+      const match = personalExpenses.find(
+        (e) =>
+          e.amount_eur > 0 &&
+          !excludedIds.has(e.id) &&
+          Math.abs(e.amount_eur - Math.abs(refund.amount_eur)) < 0.01
+      );
+      if (match) excludedIds.add(match.id);
+    });
+  const activePersonalExpenses = personalExpenses.filter((e) => !excludedIds.has(e.id));
+
   const totalTransfers = transfers.reduce((sum, t) => sum + t.amount_eur, 0);
-  const totalPersonal = personalExpenses.reduce((sum, e) => sum + e.amount_eur, 0);
+  const totalPersonal = activePersonalExpenses.reduce((sum, e) => sum + e.amount_eur, 0);
   const totalDiscrepancies = approvedDiscrepancies.reduce((sum, d) => sum + d.discrepancy, 0);
   const currentBalance = INITIAL_ADVANCE - totalPersonal + totalTransfers + totalDiscrepancies;
+
 
   if (loading) {
     return (
