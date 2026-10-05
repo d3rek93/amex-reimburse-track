@@ -19,6 +19,7 @@ export type Database = {
           balance_eur: number
           created_at: string
           id: string
+          pending_card_eur: number
           snapshot_date: string
           source: string
           updated_at: string
@@ -28,6 +29,7 @@ export type Database = {
           balance_eur: number
           created_at?: string
           id?: string
+          pending_card_eur?: number
           snapshot_date: string
           source?: string
           updated_at?: string
@@ -37,6 +39,7 @@ export type Database = {
           balance_eur?: number
           created_at?: string
           id?: string
+          pending_card_eur?: number
           snapshot_date?: string
           source?: string
           updated_at?: string

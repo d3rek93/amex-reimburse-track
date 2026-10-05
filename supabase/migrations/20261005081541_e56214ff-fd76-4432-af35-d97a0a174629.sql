@@ -1,0 +1,1 @@
+ALTER TABLE public.account_snapshots ADD COLUMN pending_card_eur numeric NOT NULL DEFAULT 0;
