@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      account_snapshots: {
+        Row: {
+          balance_eur: number
+          created_at: string
+          id: string
+          snapshot_date: string
+          source: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          balance_eur: number
+          created_at?: string
+          id?: string
+          snapshot_date: string
+          source?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          balance_eur?: number
+          created_at?: string
+          id?: string
+          snapshot_date?: string
+          source?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       balance_references: {
         Row: {
           amount_eur: number
