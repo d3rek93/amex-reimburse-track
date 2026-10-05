@@ -233,14 +233,14 @@ const Expenses = ({ embedded = false }: ExpensesProps = {}) => {
             const rawAmount = parseFloat(amountStr.replace(/\s/g, '').replace(',', '.'));
             if (isNaN(rawAmount)) return null;
 
-            const isRefund = rawAmount < 0;
+            // Boursobank: expenses are negative, refunds (card credits) are positive
+            const isRefund = rawAmount > 0;
 
-            // Include VISA ULTIM CARTE transactions (CARTE can be anywhere in label) and any transaction with "orange" in label
             const isVisaUltim = accountLabel.toUpperCase().includes('ULTIM') && label.toUpperCase().includes('CARTE');
             const isOrange = label.toLowerCase().includes('orange');
 
-            // Refunds (negative amounts) are always kept: card refunds (SNCF...) or credit transfers
-            if (!isVisaUltim && !isOrange && !isRefund) return null;
+            // Keep only card (ULTIM) and Orange operations; positive ones are refunds. Received transfers (employer reimbursements) are ignored.
+            if (!isVisaUltim && !isOrange) return null;
 
             const amount = isRefund ? -Math.abs(rawAmount) : Math.abs(rawAmount);
 
