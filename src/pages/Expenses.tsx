@@ -173,7 +173,7 @@ const Expenses = ({ embedded = false }: ExpensesProps = {}) => {
         const text = await file.text();
         const lines = text.split('\n');
         
-        const isBoursobank = lines[0] && lines[0].includes('dateOp;dateVal;label;') && lines[0].includes('accountLabel');
+        const isBoursobank = lines[0] && ((lines[0].includes('dateOp;dateVal;label;') && lines[0].includes('accountLabel')) || (lines[0].includes('Date Opération') && lines[0].includes('Libellé Compte')));
         
         if (isBoursobank) {
           const dataLines = lines.slice(1).filter(line => line.trim());
@@ -184,8 +184,8 @@ const Expenses = ({ embedded = false }: ExpensesProps = {}) => {
           // Get header to find categoryParent and category column indices
           const headerLine = lines[0];
           const headerColumns = headerLine.split(';').map(col => col.replace(/^"?|"?$/g, '').trim());
-          const categoryParentIndex = headerColumns.findIndex(h => h === 'categoryParent');
-          const categoryIndex = headerColumns.findIndex(h => h === 'category');
+          const categoryParentIndex = headerColumns.findIndex(h => h === 'categoryParent' || h === 'Catégorie Parente');
+          const categoryIndex = headerColumns.findIndex(h => h === 'category' || h === 'Catégorie');
           
           expenses = dataLines.map(line => {
             const columns = line.split(';').map(col => col.replace(/^"?|"?$/g, '').trim());
