@@ -1,0 +1,1 @@
+ALTER TABLE public.account_snapshots ADD COLUMN amex_last_debit_date date;

@@ -2,7 +2,7 @@ import { Card } from "@/components/ui/card";
 import { Expense } from "./ExpenseTable";
 import { TrendingUp, Clock, CheckCircle } from "lucide-react";
 import { ExpenseCharts } from "./ExpenseCharts";
-import { AdvanceBalanceCard } from "./AdvanceBalanceCard";
+import { AdvanceSummaryCard } from "./AdvanceSummaryCard";
 
 interface BalanceReference {
   amount_eur: number;
@@ -191,31 +191,10 @@ export const ExpenseStats = ({ expenses, reimbursements, manualTransfers, balanc
     },
   ];
 
-  // Calculate advance balance components based on reference date
-  const TARGET_ADVANCE = 1500;
-  const referenceDate = balanceReference?.reference_date;
-  
-  // Filter personal expenses since reference date
-  const personalExpensesSinceRef = expenses
-    .filter(e => e.isPersonal && (!referenceDate || e.date >= referenceDate))
-    .reduce((sum, e) => sum + e.amountEur, 0);
-  
-  // Filter manual transfers since reference date
-  const manualTransfersSinceRef = manualTransfers
-    .filter(t => !referenceDate || t.transfer_date >= referenceDate)
-    .reduce((sum, t) => sum + t.amount_eur, 0);
-
   return (
     <div className="space-y-6">
       {/* Advance Balance Card */}
-      <AdvanceBalanceCard
-        targetAdvance={TARGET_ADVANCE}
-        balanceReference={balanceReference}
-        personalExpensesSinceRef={personalExpensesSinceRef}
-        manualTransfersSinceRef={manualTransfersSinceRef}
-        onTransferAdded={onTransferAdded}
-        onBalanceReferenceUpdated={onBalanceReferenceUpdated}
-      />
+      <AdvanceSummaryCard />
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map((stat, index) => (

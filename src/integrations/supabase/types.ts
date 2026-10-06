@@ -16,6 +16,7 @@ export type Database = {
     Tables: {
       account_snapshots: {
         Row: {
+          amex_last_debit_date: string | null
           balance_eur: number
           created_at: string
           id: string
@@ -26,6 +27,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          amex_last_debit_date?: string | null
           balance_eur: number
           created_at?: string
           id?: string
@@ -36,6 +38,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          amex_last_debit_date?: string | null
           balance_eur?: number
           created_at?: string
           id?: string
