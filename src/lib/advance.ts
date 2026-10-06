@@ -31,6 +31,8 @@ export interface AdvancePosition {
   amexUnpaid: number;
   amexUnpaidSince: string | null;
   cardUnpaid: number;
+  /** Remboursements Jetfly reçus sur le compte pro pour des dépenses payées carte perso : argent à toi */
+  personalCardReimbursed: number;
   position: number;
   /** > 0 : à remettre ; < 0 : récupérable */
   toTopUp: number;
@@ -82,7 +84,11 @@ export function computeAdvancePosition(
         .reduce((s, e) => s + e.amount_eur, 0)
     : 0;
 
-  const position = bankBalance + owedByJetfly - amexUnpaid - cardUnpaid;
+  const personalCardReimbursed = expenses
+    .filter((e) => !e.is_personal && !ACCOUNT_SOURCES.includes(e.source || "AMEX"))
+    .reduce((s, e) => s + Math.max(0, Number(e.reimbursed_amount) || 0), 0);
+
+  const position = bankBalance + owedByJetfly - amexUnpaid - cardUnpaid - personalCardReimbursed;
   return {
     target,
     snapshot,
@@ -92,6 +98,7 @@ export function computeAdvancePosition(
     amexUnpaid,
     amexUnpaidSince,
     cardUnpaid,
+    personalCardReimbursed,
     position,
     toTopUp: target - position,
   };
