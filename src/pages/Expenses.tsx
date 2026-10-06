@@ -260,6 +260,33 @@ const Expenses = ({ embedded = false }: ExpensesProps = {}) => {
 
           }).filter(Boolean);
           
+          // Record real account balance + pending deferred-card total for the advance computation
+          try {
+            const rows = dataLines.map(l => l.split(';').map(c => c.replace(/^"?|"?$/g, '').trim())).filter(c => c.length >= 11);
+            const num = (v: string) => parseFloat(v.replace(/\s/g, '').replace(',', '.'));
+            const accountRows = rows.filter(c => !c[9].toUpperCase().includes('ULTIM') && !isNaN(num(c[10])));
+            if (accountRows.length > 0) {
+              const latest = accountRows.reduce((a, b) => (b[0] > a[0] ? b : a));
+              const releves = rows.filter(c => /Relevé différé/i.test(c[2])).map(c => c[0]).sort();
+              const lastReleve = releves[releves.length - 1];
+              const cardFrom = lastReleve ? lastReleve.slice(0, 8) + '01' : '0000-00-00';
+              const pendingCard = rows
+                .filter(c => c[9].toUpperCase().includes('ULTIM') && c[0] >= cardFrom)
+                .reduce((sum, c) => sum - (num(c[6]) || 0), 0);
+              const amexDebits = rows.filter(c => /American Express/i.test(c[2]) && num(c[6]) < 0).map(c => c[0]).sort();
+              await supabase.from('account_snapshots').upsert({
+                user_id: sessionData.session.user.id,
+                snapshot_date: latest[0],
+                balance_eur: num(latest[10]),
+                pending_card_eur: Math.round(pendingCard * 100) / 100,
+                amex_last_debit_date: amexDebits[amexDebits.length - 1] ?? null,
+                source: 'Boursobank',
+              }, { onConflict: 'user_id,snapshot_date,source' });
+            }
+          } catch (e) {
+            console.error('Snapshot error', e);
+          }
+
           // Insert transfers if any (check for duplicates)
           if (transfers.length > 0) {
             const { data: existingTransfers } = await supabase
@@ -310,6 +337,8 @@ const Expenses = ({ embedded = false }: ExpensesProps = {}) => {
             
             const rawAmount = parseFloat(amountStr.replace(/\s/g, ''));
             if (isNaN(rawAmount)) return null;
+            // Monthly AMEX automatic payment is not an expense nor a refund
+            if (/PRELEVEMENT AUTOMATIQUE/i.test(description)) return null;
 
             const isRefund = amountStr.trim().startsWith('-') || rawAmount < 0;
             const amount = isRefund ? -Math.abs(rawAmount) : Math.abs(rawAmount);
