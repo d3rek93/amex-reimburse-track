@@ -7,7 +7,9 @@ Avance confiée par Jetfly : 1500 €.
 Position = solde réel du compte pro (dernier relevé Boursobank)
  + dépenses pro non remboursées (AMEX/Boursobank/Prélèvement, pending/partial)
  − dépenses AMEX pas encore prélevées (depuis dernier PRLV AMEX − 2 jours)
- − achats carte ULTIM pas encore débités (débit différé mensuel).
+ − achats carte ULTIM pas encore débités (débit différé mensuel)
+ − montants remboursés par Jetfly (versés sur le compte pro) pour des dépenses pro payées carte perso (source hors AMEX/Boursobank/Prélèvement).
+Dépenses perso AMEX : prélevées sur le compte pro, non dues par Jetfly → réduisent l'avance.
 À remettre = 1500 − position (négatif = récupérable).
 Plus de solde de référence manuel ni de virements saisis dans le calcul.
 Les lignes AMEX « PRELEVEMENT AUTOMATIQUE » sont des paiements de carte, jamais des dépenses.
