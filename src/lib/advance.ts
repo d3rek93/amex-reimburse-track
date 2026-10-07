@@ -84,11 +84,13 @@ export function computeAdvancePosition(
         .reduce((s, e) => s + e.amount_eur, 0)
     : 0;
 
-  const personalCardReimbursed = expenses
+  // Remboursements carte perso : l'utilisateur les revire sur son compte perso,
+  // donc l'entrée et la sortie s'annulent déjà dans le solde réel. Affiché à titre info seulement.
+  const personalCardReimbursed = 0 && expenses
     .filter((e) => !e.is_personal && !ACCOUNT_SOURCES.includes(e.source || "AMEX"))
     .reduce((s, e) => s + Math.max(0, Number(e.reimbursed_amount) || 0), 0);
 
-  const position = bankBalance + owedByJetfly - amexUnpaid - cardUnpaid - personalCardReimbursed;
+  const position = bankBalance + owedByJetfly - amexUnpaid - cardUnpaid;
   return {
     target,
     snapshot,
