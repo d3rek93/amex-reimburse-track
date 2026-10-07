@@ -37,7 +37,6 @@ const AdvanceDetails = () => {
     { label: "Ce que Jetfly te doit", hint: `${pos.owedExpenses.length} dépense(s) pro pas encore remboursée(s)`, value: pos.owedByJetfly },
     { label: "Dépenses AMEX pas encore prélevées", hint: pos.amexUnpaidSince ? `Depuis le ${fmt(pos.amexUnpaidSince)}` : "Date du dernier prélèvement AMEX inconnue", value: -pos.amexUnpaid },
     { label: "Achats carte Boursobank pas encore débités", hint: "Débit différé de fin de mois", value: -pos.cardUnpaid },
-    { label: "Remboursements de dépenses payées carte perso", hint: "Reçus sur le compte pro, mais c'est ton argent", value: -pos.personalCardReimbursed },
   ];
 
   return (

@@ -8,7 +8,7 @@ Position = solde réel du compte pro (dernier relevé Boursobank)
  + dépenses pro non remboursées (AMEX/Boursobank/Prélèvement, pending/partial)
  − dépenses AMEX pas encore prélevées (depuis dernier PRLV AMEX − 2 jours)
  − achats carte ULTIM pas encore débités (débit différé mensuel)
- − montants remboursés par Jetfly (versés sur le compte pro) pour des dépenses pro payées carte perso (source hors AMEX/Boursobank/Prélèvement).
+ (dépenses pro payées carte perso : l'utilisateur revire leur remboursement sur son compte perso → déjà neutre dans le solde, aucun ajustement)
 Dépenses perso AMEX : prélevées sur le compte pro, non dues par Jetfly → réduisent l'avance.
 À remettre = 1500 − position (négatif = récupérable).
 Plus de solde de référence manuel ni de virements saisis dans le calcul.
