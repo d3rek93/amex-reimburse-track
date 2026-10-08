@@ -4,7 +4,7 @@ import { LegalPage, LegalSection } from "@/components/LegalPage";
  * Adresse de contact du responsable du traitement.
  * À renseigner une fois l'adresse validée par le propriétaire de l'application.
  */
-const CONTACT_EMAIL = "";
+const CONTACT_EMAIL = "mons.melvin@gmail.com";
 
 const Privacy = () => (
   <LegalPage
