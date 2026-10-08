@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -189,6 +189,22 @@ const Auth = () => {
             </form>
           </TabsContent>
         </Tabs>
+
+        <div className="mt-8 flex items-center justify-center gap-3 text-xs text-muted-foreground">
+          <Link
+            to="/privacy"
+            className="underline-offset-4 hover:text-foreground hover:underline"
+          >
+            Politique de confidentialité
+          </Link>
+          <span aria-hidden="true">·</span>
+          <Link
+            to="/terms"
+            className="underline-offset-4 hover:text-foreground hover:underline"
+          >
+            Conditions d'utilisation
+          </Link>
+        </div>
       </Card>
     </div>
   );
