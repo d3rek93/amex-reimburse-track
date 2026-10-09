@@ -28,7 +28,8 @@ const App = () => (
           <Route path="/advance" element={<AdvanceDetails />} />
           <Route path="/auth" element={<Auth />} />
           <Route path="/privacy" element={<Privacy />} />
-          <Route path="/terms" element={<Terms />} />
+            <Route path="/terms" element={<Terms />} />
+            <Route path="/bank-callback" element={<BankCallback />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
