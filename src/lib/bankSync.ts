@@ -126,7 +126,19 @@ export async function runBankSync(days = 120): Promise<SyncSummary> {
     (existing ?? []).map((e) => key(e.date, Number(e.amount_eur), e.description))
   );
 
-  const rows: Record<string, unknown>[] = [];
+interface NewExpenseRow {
+  user_id: string;
+  date: string;
+  description: string;
+  amount_eur: number;
+  reimbursement_status: string;
+  reimbursed_amount: number;
+  is_personal: boolean;
+  considered_complete: boolean;
+  source: string;
+}
+
+const rows: NewExpenseRow[] = [];
   let skipped = 0;
   for (const t of transactions) {
     const date = transactionDate(t);
@@ -250,13 +262,18 @@ export async function completeLink(code: string) {
   return data as { session_id?: string; accounts?: BankAccount[]; error?: string };
 }
 
+export interface LinkedSession {
+  session_id: string;
+  aspsp_name: string | null;
+  accounts: BankAccount[];
+  valid_until: string | null;
+}
+
 /** Sessions already linked for this user. */
-export async function listLinked(): Promise<
-  { session_id: string; aspsp_name: string | null; accounts: BankAccount[]; valid_until: string | null }[]
-> {
+export async function listLinked(): Promise<LinkedSession[]> {
   const { data, error } = await supabase.functions.invoke("enable-banking", {
     body: { action: "status" },
   });
   if (error) throw new Error(error.message ?? "Unable to read links");
-  return (data as { sessions?: unknown[] }).sessions ?? [];
+  return (data as { sessions?: LinkedSession[] }).sessions ?? [];
 }
