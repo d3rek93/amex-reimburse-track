@@ -77,6 +77,42 @@ export type Database = {
         }
         Relationships: []
       }
+      bank_sessions: {
+        Row: {
+          accounts: Json
+          aspsp_name: string | null
+          country: string | null
+          created_at: string
+          id: string
+          session_id: string
+          updated_at: string
+          user_id: string
+          valid_until: string | null
+        }
+        Insert: {
+          accounts?: Json
+          aspsp_name?: string | null
+          country?: string | null
+          created_at?: string
+          id?: string
+          session_id: string
+          updated_at?: string
+          user_id: string
+          valid_until?: string | null
+        }
+        Update: {
+          accounts?: Json
+          aspsp_name?: string | null
+          country?: string | null
+          created_at?: string
+          id?: string
+          session_id?: string
+          updated_at?: string
+          user_id?: string
+          valid_until?: string | null
+        }
+        Relationships: []
+      }
       expenses: {
         Row: {
           amount_eur: number
