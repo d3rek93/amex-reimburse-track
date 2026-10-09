@@ -2,9 +2,10 @@ import { useState } from "react";
 import { NavLink } from "@/components/NavLink";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { Menu, FileText, LogOut, BarChart3, Receipt, Upload, DollarSign, Wallet } from "lucide-react";
+import { Menu, FileText, LogOut, BarChart3, Receipt, Upload, DollarSign, Wallet, Landmark } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
+import { BankSyncDialog } from "@/components/BankSyncDialog";
 
 interface NavigationProps {
   onUpload?: () => void;
@@ -12,6 +13,7 @@ interface NavigationProps {
 
 export const Navigation = ({ onUpload }: NavigationProps) => {
   const [open, setOpen] = useState(false);
+  const [bankOpen, setBankOpen] = useState(false);
   const navigate = useNavigate();
 
   const handleSignOut = async () => {
@@ -59,6 +61,10 @@ export const Navigation = ({ onUpload }: NavigationProps) => {
                 Importer
               </Button>
             )}
+            <Button variant="outline" size="sm" onClick={() => setBankOpen(true)} className="ml-2">
+              <Landmark className="h-4 w-4 mr-2" />
+              Banque
+            </Button>
             <Button variant="ghost" size="sm" onClick={handleSignOut} className="ml-2">
               <LogOut className="h-4 w-4 mr-2" />
               Déconnexion
@@ -101,6 +107,17 @@ export const Navigation = ({ onUpload }: NavigationProps) => {
                   </Button>
                 )}
                 <Button
+                  variant="outline"
+                  onClick={() => {
+                    setBankOpen(true);
+                    setOpen(false);
+                  }}
+                  className="justify-start"
+                >
+                  <Landmark className="h-5 w-5 mr-3" />
+                  Banque
+                </Button>
+                <Button
                   variant="ghost"
                   onClick={handleSignOut}
                   className="justify-start text-destructive hover:text-destructive hover:bg-destructive/10"
@@ -112,6 +129,7 @@ export const Navigation = ({ onUpload }: NavigationProps) => {
             </SheetContent>
           </Sheet>
         </div>
+        <BankSyncDialog open={bankOpen} onOpenChange={setBankOpen} onSynced={() => window.location.reload()} />
       </div>
     </nav>
   );
