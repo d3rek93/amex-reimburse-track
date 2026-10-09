@@ -131,30 +131,58 @@ serve(async (req) => {
       });
       const sessionId = session.session_id ?? session.id;
       if (!sessionId) return json({ error: "No session id returned" }, 502);
-      const accounts = (session.accounts ?? []).map((a: Record<string, unknown>) => ({
+      const rawAccounts = (session.accounts ?? []) as Array<Record<string, any>>;
+      const accounts = rawAccounts.map((a) => ({
         uid: a.uid,
-        iban: a.iban,
+        iban: a.account_id?.iban ?? a.iban,
         name: a.name,
+        product: a.product,
         currency: a.currency,
         usage: a.usage,
+        // Several accounts: the user picks which ones to follow.
+        enabled: rawAccounts.length === 1,
       }));
+      const aspspName = session.aspsp?.name ?? session.aspsp_name ?? null;
       const { error: upError } = await client
         .from("bank_sessions")
         .upsert(
           {
             user_id: userId,
             session_id: sessionId,
-            aspsp_name: session.aspsp_name ?? null,
-            country: session.country ?? null,
+            aspsp_name: aspspName,
+            country: session.aspsp?.country ?? session.country ?? null,
             accounts,
-            valid_until: session.access_details?.valid_until ?? null,
+            valid_until: session.access?.valid_until ?? session.access_details?.valid_until ?? null,
           },
           { onConflict: "user_id,session_id" }
         );
       if (upError) {
         console.error("bank_sessions upsert failed", upError);
       }
-      return json({ session_id: sessionId, accounts, aspsp_name: session.aspsp_name });
+      return json({ session_id: sessionId, accounts, aspsp_name: aspspName });
+    }
+
+    if (action === "set_accounts") {
+      const sessionId = String(body.session_id ?? "");
+      const enabledUids = new Set((body.uids ?? []).map(String));
+      const { data: row, error } = await client
+        .from("bank_sessions")
+        .select("accounts")
+        .eq("user_id", userId)
+        .eq("session_id", sessionId)
+        .maybeSingle();
+      if (error || !row) return json({ error: error?.message ?? "Session not found" }, 404);
+      const accounts = ((row.accounts ?? []) as Array<Record<string, unknown>>).map((a) => ({
+        ...a,
+        enabled: enabledUids.has(String(a.uid)),
+      }));
+      const { error: upErr } = await client
+        .from("bank_sessions")
+        .update({ accounts })
+        .eq("user_id", userId)
+        .eq("session_id", sessionId);
+      if (upErr) return json({ error: upErr.message }, 500);
+      return json({ ok: true, accounts });
     }
 
     if (action === "status") {
