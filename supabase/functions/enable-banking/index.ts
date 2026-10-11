@@ -213,7 +213,7 @@ serve(async (req) => {
       for (const row of rows ?? []) {
         for (const account of (row.accounts ?? []) as Array<Record<string, unknown>>) {
           const uid = String(account.uid ?? "");
-          if (!uid) continue;
+          if (!uid || account.enabled === false) continue;
           try {
             const balances = await eb(
               `/accounts/${encodeURIComponent(uid)}/balances`
@@ -244,7 +244,8 @@ serve(async (req) => {
       const { error } = await client
         .from("bank_sessions")
         .delete()
-        .eq("user_id", userId);
+        .eq("user_id", userId)
+        .match(body.session_id ? { session_id: String(body.session_id) } : {});
       if (error) return json({ error: error.message }, 500);
       return json({ ok: true });
     }
