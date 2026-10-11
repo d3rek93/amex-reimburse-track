@@ -151,69 +151,6 @@ export const BankSyncDialog = ({
   );
   const showPicker = sessions.length === 0 || addingBank;
 
-  return () => {
-      active = false;
-    };
-  }, [open]);
-
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    const list = q ? banks.filter((b) => b.name.toLowerCase().includes(q)) : banks;
-    return [...list].sort((a, b) => a.name.localeCompare(b.name)).slice(0, 60);
-  }, [banks, search]);
-
-  const handleLink = async (name: string) => {
-    setBusy("link");
-    try {
-      const { url, state } = await startLink(name, "FR");
-      sessionStorage.setItem("enable_banking_state", state);
-      window.location.assign(url);
-    } catch (err) {
-      toast({
-        title: "Connexion impossible",
-        description: (err as Error).message,
-        variant: "destructive",
-      });
-      setBusy(null);
-    }
-  };
-
-  const handleSync = async () => {
-    setBusy("sync");
-    try {
-      const summary = await runBankSync(120);
-      toast({
-        title: "Compte synchronisé",
-        description:
-          `${summary.imported} nouvelle(s) ligne(s) importée(s)` +
-          (summary.balance !== null
-            ? ` · solde ${summary.balance.toFixed(2).replace(".", ",")} €`
-            : ""),
-      });
-      onSynced?.();
-    } catch (err) {
-      toast({
-        title: "Synchronisation impossible",
-        description: (err as Error).message,
-        variant: "destructive",
-      });
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const handleForget = async () => {
-    setBusy("forget");
-    try {
-      const { supabase } = await import("@/integrations/supabase/client");
-      await supabase.functions.invoke("enable-banking", { body: { action: "forget" } });
-      setSessions([]);
-      toast({ title: "Compte déconnecté" });
-    } finally {
-      setBusy(null);
-    }
-  };
-
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
