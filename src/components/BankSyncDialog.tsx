@@ -9,9 +9,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import {
   BankAccount,
+  forgetLink,
+  setFollowedAccounts,
   listBanks,
   listLinked,
   runBankSync,
@@ -44,7 +47,8 @@ export const BankSyncDialog = ({
   const [banks, setBanks] = useState<{ name: string; country: string }[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState<"sync" | "link" | "forget" | null>(null);
+  const [busy, setBusy] = useState<"sync" | "link" | "forget" | "save" | null>(null);
+  const [addingBank, setAddingBank] = useState(false);
 
   const isPublished =
     typeof window !== "undefined" && window.location.origin === PUBLISHED_ORIGIN;
@@ -54,6 +58,7 @@ export const BankSyncDialog = ({
     let active = true;
     setLoading(true);
     setSearch("");
+    setAddingBank(false);
     Promise.all([listLinked().catch(() => []), listBanks("FR").catch(() => [])])
       .then(([linked, available]) => {
         if (!active) return;
@@ -62,6 +67,91 @@ export const BankSyncDialog = ({
       })
       .finally(() => active && setLoading(false));
     return () => {
+      active = false;
+    };
+  }, [open]);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const list = q ? banks.filter((b) => b.name.toLowerCase().includes(q)) : banks;
+    return [...list].sort((a, b) => a.name.localeCompare(b.name)).slice(0, 60);
+  }, [banks, search]);
+
+  const handleLink = async (name: string) => {
+    setBusy("link");
+    try {
+      const { url, state } = await startLink(name, "FR");
+      sessionStorage.setItem("enable_banking_state", state);
+      window.location.assign(url);
+    } catch (err) {
+      toast({
+        title: "Connexion impossible",
+        description: (err as Error).message,
+        variant: "destructive",
+      });
+      setBusy(null);
+    }
+  };
+
+  const handleSync = async () => {
+    setBusy("sync");
+    try {
+      const summary = await runBankSync(120);
+      toast({
+        title: "Compte synchronisé",
+        description:
+          `${summary.imported} nouvelle(s) ligne(s) importée(s)` +
+          (summary.balance !== null
+            ? ` · solde ${summary.balance.toFixed(2).replace(".", ",")} €`
+            : ""),
+      });
+      onSynced?.();
+    } catch (err) {
+      toast({
+        title: "Synchronisation impossible",
+        description: (err as Error).message,
+        variant: "destructive",
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleForget = async (sessionId: string) => {
+    setBusy("forget");
+    try {
+      await forgetLink(sessionId);
+      setSessions((prev) => prev.filter((x) => x.session_id !== sessionId));
+      toast({ title: "Banque déconnectée" });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const toggleAccount = async (session: LinkedSession, uid: string, on: boolean) => {
+    const uids = session.accounts
+      .filter((a) => (a.uid === uid ? on : a.enabled !== false))
+      .map((a) => String(a.uid));
+    setBusy("save");
+    try {
+      const accounts = await setFollowedAccounts(session.session_id, uids);
+      setSessions((prev) =>
+        prev.map((x) => (x.session_id === session.session_id ? { ...x, accounts } : x))
+      );
+    } catch (err) {
+      toast({ title: "Enregistrement impossible", description: (err as Error).message, variant: "destructive" });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const followed = sessions.reduce(
+    (n, s) => n + (s.accounts ?? []).filter((a) => a.enabled !== false).length,
+    0
+  );
+  const showPicker = sessions.length === 0 || addingBank;
+
+  return () => {
       active = false;
     };
   }, [open]);
@@ -124,10 +214,6 @@ export const BankSyncDialog = ({
     }
   };
 
-  const linkedName = sessions[0]?.aspsp_name ?? null;
-  const validUntil = sessions[0]?.valid_until
-    ? new Date(sessions[0].valid_until as string).toLocaleDateString("fr-FR")
-    : null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -148,18 +234,42 @@ export const BankSyncDialog = ({
             <Loader2 className="h-4 w-4 animate-spin" />
             Vérification des accès…
           </div>
-        ) : sessions.length > 0 ? (
+        ) : !showPicker ? (
           <div className="space-y-4">
-            <div className="rounded-lg border bg-muted/40 p-4">
-              <p className="text-sm font-medium">{linkedName ?? "Compte connecté"}</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                {sessions.reduce((n, s) => n + (s.accounts?.length ?? 0), 0)} compte(s)
-                accessible(s)
-                {validUntil ? ` · accès valide jusqu'au ${validUntil}` : ""}
-              </p>
-            </div>
+            {sessions.map((session) => (
+              <div key={session.session_id} className="rounded-lg border bg-muted/40 p-4 space-y-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-medium">{session.aspsp_name ?? "Banque connectée"}</p>
+                    {session.valid_until && (
+                      <p className="text-xs text-muted-foreground">
+                        Accès valide jusqu'au {new Date(session.valid_until).toLocaleDateString("fr-FR")}
+                      </p>
+                    )}
+                  </div>
+                  <Button size="sm" variant="ghost" onClick={() => handleForget(session.session_id)} disabled={busy !== null}>
+                    <Unlink className="h-4 w-4 mr-1" />
+                    Déconnecter
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">Coche les comptes à suivre :</p>
+                {(session.accounts ?? []).map((acc) => (
+                  <label key={acc.uid} className="flex items-center gap-3 text-sm cursor-pointer">
+                    <Checkbox
+                      checked={acc.enabled !== false}
+                      disabled={busy !== null}
+                      onCheckedChange={(v) => toggleAccount(session, String(acc.uid), v === true)}
+                    />
+                    <span>
+                      {acc.product || acc.name || "Compte"}
+                      {acc.iban ? <span className="text-muted-foreground"> · …{acc.iban.slice(-4)}</span> : null}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            ))}
             <div className="flex flex-wrap gap-2">
-              <Button onClick={handleSync} disabled={busy !== null}>
+              <Button onClick={handleSync} disabled={busy !== null || followed === 0}>
                 {busy === "sync" ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 ) : (
@@ -167,18 +277,18 @@ export const BankSyncDialog = ({
                 )}
                 Synchroniser maintenant
               </Button>
-              <Button
-                variant="outline"
-                onClick={handleForget}
-                disabled={busy !== null}
-              >
-                <Unlink className="h-4 w-4 mr-2" />
-                Déconnecter
+              <Button variant="outline" onClick={() => setAddingBank(true)} disabled={busy !== null}>
+                Ajouter une banque
               </Button>
             </div>
           </div>
         ) : (
           <div className="space-y-4">
+            {sessions.length > 0 && (
+              <Button size="sm" variant="ghost" onClick={() => setAddingBank(false)}>
+                ← Retour aux comptes connectés
+              </Button>
+            )}
             {!isPublished && (
               <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs">
                 La connexion doit se faire sur l'adresse publiée de l'application :{" "}
