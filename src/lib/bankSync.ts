@@ -24,6 +24,7 @@ interface BankBalance {
   balanceType?: string;
   balance_amount?: { amount?: string | number; currency?: string };
   balance_type?: string;
+  reference_date?: string;
   referenceDate?: string;
 }
 
@@ -89,6 +90,28 @@ export function isBankExpenseLine(description: string): boolean {
   );
 }
 
+/** AMEX debits and deferred-card statements pay expenses already counted. */
+export function isSettlementLine(description: string): boolean {
+  return /RELEV[EÉ] DIFF[EÉ]R[EÉ]|AMERICAN EXPRESS/i.test(description);
+}
+
+/** Merchant part of a label, used to match the same purchase across sources. */
+export function merchantKey(description: string): string {
+  return description
+    .toUpperCase()
+    .replace(/^REMBOURSEMENT - /, "")
+    .replace(/^CARTE \d{2}\/\d{2}\/\d{2}\s*/, "")
+    .replace(/[^A-Z]/g, "")
+    .slice(0, 10);
+}
+
+/** Day the purchase happened (card lines carry it in the label). */
+export function operationDate(t: BankTransaction): string {
+  const m = describeTransaction(t).match(/CARTE (\d{2})\/(\d{2})\/(\d{2})/i);
+  if (m) return `20${m[3]}-${m[2]}-${m[1]}`;
+  return String((t.transaction_date as string) || t.value_date || transactionDate(t)).slice(0, 10);
+}
+
 const key = (date: string, amount: number, description: string) =>
   `${date}|${amount.toFixed(2)}|${description.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 14)}`;
 
@@ -118,18 +141,35 @@ export async function runBankSync(days = 120): Promise<SyncSummary> {
   const userId = sessionData.session?.user.id;
   if (!userId) throw new Error("Vous devez être connecté");
 
-  const transactions = results.flatMap((r) => r.transactions ?? []);
-  const dates = transactions.map(transactionDate).filter(Boolean).sort();
-  const from = dates[0] ?? new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+  // Only Boursobank accounts feed expenses and balance (AMEX stays on file import).
+  const bourso = results.filter((r) => !/american express/i.test(r.aspsp_name ?? ""));
+  const isCardAccount = (r: BankSyncResult) =>
+    /carte|card|ultim/i.test(`${r.account.product ?? ""} ${r.account.name ?? ""}`);
+  const mainAccounts = bourso.filter((r) => !isCardAccount(r));
+  const cardAccounts = bourso.filter(isCardAccount);
+  const transactions = bourso.flatMap((r) => r.transactions ?? []);
+  const from = new Date(Date.now() - (days + 60) * 86400000).toISOString().slice(0, 10);
 
   const { data: existing } = await supabase
     .from("expenses")
     .select("date, amount_eur, description")
     .eq("user_id", userId)
     .gte("date", from);
-  const seen = new Set(
-    (existing ?? []).map((e) => key(e.date, Number(e.amount_eur), e.description))
-  );
+  const existingRows = (existing ?? []).map((e) => ({
+    date: e.date as string,
+    amount: Number(e.amount_eur),
+    merchant: merchantKey(e.description),
+  }));
+  const isDuplicate = (date: string, amount: number, description: string) => {
+    const m = merchantKey(description);
+    const t = Date.parse(date);
+    return existingRows.some(
+      (e) =>
+        Math.abs(e.amount - amount) < 0.005 &&
+        Math.abs(Date.parse(e.date) - t) <= 45 * 86400000 &&
+        (e.merchant === m || !m || !e.merchant || e.merchant.startsWith(m.slice(0, 6)) || m.startsWith(e.merchant.slice(0, 6)))
+    );
+  };
 
 interface NewExpenseRow {
   user_id: string;
@@ -143,22 +183,21 @@ interface NewExpenseRow {
   source: string;
 }
 
-const rows: NewExpenseRow[] = [];
+  const rows: NewExpenseRow[] = [];
   let skipped = 0;
   for (const t of transactions) {
-    const date = transactionDate(t);
+    const date = operationDate(t);
     const description = describeTransaction(t);
     const amount = transactionAmount(t);
-    if (!date || !isBankExpenseLine(description) || amount === 0) {
+    if (!date || !isBankExpenseLine(description) || amount === 0 || isSettlementLine(description)) {
       skipped += 1;
       continue;
     }
-    const k = key(date, amount, description);
-    if (seen.has(k)) {
+    if (isDuplicate(date, amount, description)) {
       skipped += 1;
       continue;
     }
-    seen.add(k);
+    existingRows.push({ date, amount, merchant: merchantKey(description) });
     const isRefund = amount < 0;
     rows.push({
       user_id: userId,
@@ -178,50 +217,47 @@ const rows: NewExpenseRow[] = [];
     if (insertError) throw new Error(insertError.message);
   }
 
-  // Real balance of the main account, for the advance computation.
+  // Real balance: current account only, never the deferred card account.
   let balance: number | null = null;
   let snapshotDate: string | null = null;
-  for (const r of results) {
+  const today = new Date().toISOString().slice(0, 10);
+  for (const r of mainAccounts) {
     const list = r.balances?.balances ?? [];
     if (list.length === 0) continue;
     const type = (b: BankBalance) => b.balance_type ?? b.balanceType;
     const chosen =
       list.find((b) => type(b) === "CLBD") ??
       list.find((b) => type(b) === "XPCD") ??
-      list.find((b) => type(b) === "expected") ??
       list[0];
-    const value = num((chosen.balance_amount ?? chosen.balance)?.amount);
-    if (value === 0) continue;
-    if (balance === null || Math.abs(value) > Math.abs(balance)) balance = value;
+    balance = (balance ?? 0) + num((chosen.balance_amount ?? chosen.balance)?.amount);
+    const ref = String(chosen.reference_date ?? chosen.referenceDate ?? today).slice(0, 10);
+    if (!snapshotDate || ref > snapshotDate) snapshotDate = ref;
   }
-  const accountDates = results
-    .flatMap((r) => (r.transactions ?? []).map(transactionDate))
-    .filter(Boolean)
-    .sort();
-  if (accountDates.length > 0) snapshotDate = accountDates[accountDates.length - 1];
-  if (balance === null) snapshotDate = null;
+  if (snapshotDate && snapshotDate > today) snapshotDate = today;
 
   if (balance !== null && snapshotDate) {
+    // Card purchases not yet taken from the account (booked after the snapshot day).
+    const pendingCard = cardAccounts
+      .flatMap((r) => r.transactions ?? [])
+      .filter((t) => !isSettlementLine(describeTransaction(t)) && transactionDate(t) > snapshotDate!)
+      .reduce((sum, t) => sum + transactionAmount(t), 0);
+    const amexDebit = mainAccounts
+      .flatMap((r) => r.transactions ?? [])
+      .filter((t) => /AMERICAN EXPRESS/i.test(describeTransaction(t)) && transactionAmount(t) > 0)
+      .map(transactionDate)
+      .sort();
     const { data: previous } = await supabase
       .from("account_snapshots")
-      .select("pending_card_eur, amex_last_debit_date")
+      .select("amex_last_debit_date")
       .eq("user_id", userId)
       .eq("source", "Boursobank")
       .order("snapshot_date", { ascending: false })
       .limit(1);
-    const amexDebit = transactions
-      .filter(
-        (t) =>
-          /AMERICAN EXPRESS/i.test(describeTransaction(t)) &&
-          transactionAmount(t) > 0
-      )
-      .map(transactionDate)
-      .sort();
     await supabase.from("account_snapshots").upsert({
       user_id: userId,
       snapshot_date: snapshotDate,
-      balance_eur: balance,
-      pending_card_eur: previous?.[0]?.pending_card_eur ?? 0,
+      balance_eur: Math.round(balance * 100) / 100,
+      pending_card_eur: Math.round(Math.max(pendingCard, 0) * 100) / 100,
       amex_last_debit_date: amexDebit[amexDebit.length - 1] ?? previous?.[0]?.amex_last_debit_date ?? null,
       source: "Boursobank",
     }, { onConflict: "user_id,snapshot_date,source" });
@@ -233,7 +269,7 @@ const rows: NewExpenseRow[] = [];
     balance,
     snapshotDate,
     errors,
-    accounts: results.length,
+    accounts: bourso.length,
   };
 }
 
