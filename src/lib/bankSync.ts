@@ -6,6 +6,8 @@ export interface BankAccount {
   name?: string;
   currency?: string;
   usage?: string;
+  product?: string;
+  enabled?: boolean;
 }
 
 export interface BankSyncResult {
@@ -20,6 +22,8 @@ export interface BankSyncResult {
 interface BankBalance {
   balance?: { amount?: string | number; currency?: string };
   balanceType?: string;
+  balance_amount?: { amount?: string | number; currency?: string };
+  balance_type?: string;
   referenceDate?: string;
 }
 
@@ -30,6 +34,7 @@ export interface BankTransaction {
   transaction_status?: string;
   credit_debit_indicator?: string;
   amount?: { amount?: string | number; currency?: string };
+  transaction_amount?: { amount?: string | number; currency?: string };
   remittance_information?: string[] | string;
   unstructured_remittance_information?: { value?: string }[];
   structured_remittance_information?: Record<string, unknown>;
@@ -69,9 +74,9 @@ export function transactionDate(t: BankTransaction): string {
 
 /** Signed amount in euros: money leaving the account is positive. */
 export function transactionAmount(t: BankTransaction): number {
-  const value = Math.abs(num(t.amount?.amount));
-  const indicator = String(t.credit_debit_indicator ?? "").toLowerCase();
-  return indicator === "credit" ? -value : value;
+  const value = Math.abs(num((t.transaction_amount ?? t.amount)?.amount));
+  const indicator = String(t.credit_debit_indicator ?? "").toUpperCase();
+  return indicator === "CRDT" || indicator === "CREDIT" ? -value : value;
 }
 
 /** Only card payments, deferred-card statements and direct debits are expenses. */
@@ -179,11 +184,13 @@ const rows: NewExpenseRow[] = [];
   for (const r of results) {
     const list = r.balances?.balances ?? [];
     if (list.length === 0) continue;
+    const type = (b: BankBalance) => b.balance_type ?? b.balanceType;
     const chosen =
-      list.find((b) => b.balanceType === "expected") ??
-      list.find((b) => b.balanceType === "interimBooked") ??
+      list.find((b) => type(b) === "CLBD") ??
+      list.find((b) => type(b) === "XPCD") ??
+      list.find((b) => type(b) === "expected") ??
       list[0];
-    const value = num(chosen.balance?.amount);
+    const value = num((chosen.balance_amount ?? chosen.balance)?.amount);
     if (value === 0) continue;
     if (balance === null || Math.abs(value) > Math.abs(balance)) balance = value;
   }
@@ -276,4 +283,21 @@ export async function listLinked(): Promise<LinkedSession[]> {
   });
   if (error) throw new Error(error.message ?? "Unable to read links");
   return (data as { sessions?: LinkedSession[] }).sessions ?? [];
+}
+
+/** Choose which accounts of a linked bank are followed by the sync. */
+export async function setFollowedAccounts(sessionId: string, uids: string[]) {
+  const { data, error } = await supabase.functions.invoke("enable-banking", {
+    body: { action: "set_accounts", session_id: sessionId, uids },
+  });
+  if (error) throw new Error(error.message ?? "Unable to save");
+  return (data as { accounts?: BankAccount[] }).accounts ?? [];
+}
+
+/** Remove one linked bank (or all when no id). */
+export async function forgetLink(sessionId?: string) {
+  const { error } = await supabase.functions.invoke("enable-banking", {
+    body: { action: "forget", session_id: sessionId },
+  });
+  if (error) throw new Error(error.message ?? "Unable to unlink");
 }
