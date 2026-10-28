@@ -61,11 +61,25 @@ export function PickExpenses({
     return e.amount_eur !== 0 && ["pending", "to_review", "refund", "reimbursed", "no_note"].includes(st ?? "");
   });
   const days = (a: string, b: string) => Math.abs(Date.parse(a) - Date.parse(b)) / 86400000;
-  const candidates = free
-    .filter((e) => !q || e.description.toLowerCase().includes(q) || e.amount_eur.toFixed(2).includes(q))
-    .sort((a, b) => Math.abs(a.amount_eur - target) - Math.abs(b.amount_eur - target) || days(a.date, date) - days(b.date, date))
-    .slice(0, 40);
   const already = extend ? extend.lineIds.reduce((s, id) => s + (ledger.expenseById.get(id)?.amount_eur ?? 0), 0) : 0;
+  // What is still missing: the whole note, or the gap left by the expenses already associated.
+  const gap = target - already;
+  // Merchants already in the association come first (a credit note at the same hotel…).
+  const merchant = (label: string) => label.toUpperCase().replace(/^REMBOURSEMENT - /, "").replace(/[^A-Z]/g, "").slice(0, 8);
+  const linkedMerchants = new Set((extend?.lineIds ?? []).map((id) => merchant(ledger.expenseById.get(id)?.description ?? "")));
+  const searched = free
+    .filter((e) => !extend?.lineIds.includes(e.id))
+    .filter((e) => !q || e.description.toLowerCase().includes(q) || Math.abs(e.amount_eur).toFixed(2).includes(q));
+  const rank = (list: ExpenseRow[]) =>
+    list.sort(
+      (a, b) =>
+        Number(linkedMerchants.has(merchant(b.description))) - Number(linkedMerchants.has(merchant(a.description))) ||
+        Math.abs(a.amount_eur - gap) - Math.abs(b.amount_eur - gap) ||
+        days(a.date, date) - days(b.date, date),
+    );
+  const purchases = rank(searched.filter((e) => e.amount_eur > 0)).slice(0, 40);
+  // Credit notes: shown apart, near the note's date unless searched for.
+  const credits = rank(searched.filter((e) => e.amount_eur < 0 && (q !== "" || days(e.date, date) <= 120))).slice(0, 20);
   const total = already + [...selected].reduce((s, id) => s + (ledger.expenseById.get(id)?.amount_eur ?? 0), 0);
   const difference = Math.round((total - target) * 100) / 100;
 
@@ -88,12 +102,27 @@ export function PickExpenses({
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" aria-hidden />
           <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Libellé ou montant" className="pl-9" aria-label="Chercher une dépense" />
         </div>
-        <p className="text-xs text-muted-foreground">Dépenses encore libres, de la plus proche en montant à la plus éloignée.</p>
+        <p className="text-xs text-muted-foreground">
+          {!extend
+            ? "Dépenses encore libres, de la plus proche en montant à la plus éloignée. Les avoirs sont listés à part."
+            : gap < 0
+              ? `L'association dépasse la note de ${eur(-gap)} : un avoir de ce montant comblerait l'écart.`
+              : `Il manque ${eur(gap)} pour atteindre le montant de la note.`}
+        </p>
         <div className="rounded-lg border divide-y max-h-[50vh] overflow-y-auto">
-          {candidates.length === 0 ? (
+          {purchases.length === 0 && credits.length === 0 ? (
             <p className="px-4 py-3 text-sm text-muted-foreground">Aucune dépense libre ne correspond.</p>
           ) : (
-            candidates.map((e) => (
+            (gap < 0
+              ? ([["credits", credits], ["purchases", purchases]] as const)
+              : ([["purchases", purchases], ["credits", credits]] as const)
+            ).flatMap(([kind, list]) => [
+              list.length > 0 ? (
+                <p key={`h-${kind}`} className="px-4 py-1.5 text-xs font-medium text-muted-foreground bg-muted/40">
+                  {kind === "credits" ? "Avoirs et crédits" : "Dépenses"}
+                </p>
+              ) : null,
+              ...list.map((e) => (
               <SelectableRow
                 key={e.id}
                 checked={selected.has(e.id)}
@@ -106,13 +135,14 @@ export function PickExpenses({
                 date={e.date}
                 label={
                   <>
-                    <span>{e.description}</span>
+                    <span>{e.description.replace(/^Remboursement - /, "")}</span>
                     <span className="text-muted-foreground"> · {e.source}</span>
                   </>
                 }
                 amount={e.amount_eur}
               />
-            ))
+              )),
+            ])
           )}
         </div>
         <DialogFooter className="items-center gap-2 sm:justify-between">
