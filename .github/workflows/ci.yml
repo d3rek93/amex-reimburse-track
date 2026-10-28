@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main, v2]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # npm install (not ci) so the lockfile follows package.json changes;
+      # the refreshed lockfile is uploaded below to be committed.
+      - name: Install
+        run: npm install --no-audit --no-fund
+
+      - name: Upload lockfile
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-lock
+          path: package-lock.json
+
+      - name: Type check
+        id: typecheck
+        continue-on-error: true
+        run: npm run typecheck
+
+      - name: Lint
+        id: lint
+        continue-on-error: true
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Report
+        run: |
+          echo "typecheck: ${{ steps.typecheck.outcome }}"
+          echo "lint: ${{ steps.lint.outcome }}"
+          test "${{ steps.typecheck.outcome }}" = "success"

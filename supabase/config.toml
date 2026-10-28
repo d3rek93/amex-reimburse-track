@@ -1,4 +1,7 @@
-project_id = "cdopymrsflwvevwweasl"
+project_id = "uynegxjtcthcmqgbosvh"
 
 [functions.parse-amex-pdf]
+verify_jwt = true
+
+[functions.enable-banking]
 verify_jwt = true

@@ -84,6 +84,7 @@ export type Database = {
           country: string | null
           created_at: string
           id: string
+          last_synced_at: string | null
           session_id: string
           updated_at: string
           user_id: string
@@ -95,6 +96,7 @@ export type Database = {
           country?: string | null
           created_at?: string
           id?: string
+          last_synced_at?: string | null
           session_id: string
           updated_at?: string
           user_id: string
@@ -106,6 +108,7 @@ export type Database = {
           country?: string | null
           created_at?: string
           id?: string
+          last_synced_at?: string | null
           session_id?: string
           updated_at?: string
           user_id?: string
@@ -117,6 +120,7 @@ export type Database = {
         Row: {
           amount_eur: number
           considered_complete: boolean
+          bank_transaction_id: string | null
           conversion_fees: number | null
           created_at: string
           date: string
@@ -135,6 +139,7 @@ export type Database = {
         Insert: {
           amount_eur: number
           considered_complete?: boolean
+          bank_transaction_id?: string | null
           conversion_fees?: number | null
           created_at?: string
           date: string
@@ -153,6 +158,7 @@ export type Database = {
         Update: {
           amount_eur?: number
           considered_complete?: boolean
+          bank_transaction_id?: string | null
           conversion_fees?: number | null
           created_at?: string
           date?: string

@@ -6,7 +6,8 @@ import { SignJWT, importPKCS8 } from "npm:jose@5.9.6";
 const API = "https://api.enablebanking.com";
 const APP_ID = Deno.env.get("ENABLE_BANKING_APPLICATION_ID") ?? "";
 const PRIVATE_KEY = Deno.env.get("ENABLE_BANKING_PRIVATE_KEY") ?? "";
-const REDIRECT_URL = "https://amex-reimburse-track.lovable.app/bank-callback";
+// The app URL registered as redirect in the Enable Banking control panel.
+const REDIRECT_URL = `${(Deno.env.get("APP_URL") ?? "").replace(/\/$/, "")}/bank-callback`;
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
