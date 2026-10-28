@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: expense-tracker
+    runtime: static
+    branch: v2
+    buildCommand: npm install --no-audit --no-fund && npm run build
+    staticPublishPath: dist
+    pullRequestPreviewsEnabled: false
+    routes:
+      # Single-page app: every path (e.g. /bank-callback) serves index.html
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    headers:
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
