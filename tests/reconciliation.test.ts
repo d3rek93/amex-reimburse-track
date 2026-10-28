@@ -195,3 +195,12 @@ test("personal lines are never matched", () => {
   assert.equal(r.matches.length, 0);
   assert.deepEqual(r.unmatchedNoteIds, ["100017"]);
 });
+
+test("a rejected pair is never proposed again", () => {
+  const line = bank("2026-09-02", 98, "SNCF-VOYAGEURS SNCF436 PARIS");
+  const claimLines = [note("100018", "2026-09-02", "Positionning", "Train", 98)];
+  const r = reconcile({ lines: [line], claimLines, rejected: [{ noteId: "100018", lineId: line.id }] });
+  assert.equal(r.matches.length, 0);
+  assert.equal(r.suggestions.length, 0);
+  assert.deepEqual(r.unmatchedNoteIds, ["100018"]);
+});

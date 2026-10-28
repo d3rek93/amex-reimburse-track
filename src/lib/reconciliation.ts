@@ -50,6 +50,8 @@ export interface Transfer {
 export interface ConfirmedLink {
   noteIds: string[];
   lineIds: string[];
+  /** Caller's id for the link, returned on the match. */
+  ref?: string;
 }
 
 /** merchant key → kind → number of confirmed associations. */
@@ -82,6 +84,8 @@ export interface Match {
   confidence: "high" | "medium" | "low";
   auto: boolean;
   reason: string;
+  /** For confirmed matches: the ref of the ConfirmedLink. */
+  ref?: string;
 }
 
 export interface BatchStatus {
@@ -97,6 +101,8 @@ export interface ReconcileInput {
   claimLines: ClaimLine[];
   transfers?: Transfer[];
   confirmed?: ConfirmedLink[];
+  /** Pairs the user rejected: never proposed again. */
+  rejected?: { noteId: string; lineId: string }[];
   rules?: LearnedRules;
 }
 
@@ -274,6 +280,8 @@ export function reconcile(input: ReconcileInput, options: ReconcileOptions = {})
   const mismatchWindow = options.mismatchWindow ?? 2;
   const transferWindow = options.transferWindow ?? 5;
   const rules = input.rules ?? {};
+  const rejected = new Set((input.rejected ?? []).map((r) => `${r.noteId}|${r.lineId}`));
+  const allowed = (noteId: string, lineId: string) => !rejected.has(`${noteId}|${lineId}`);
 
   const claims = buildClaims(input.claimLines);
   const claimById = new Map(claims.map((c) => [c.noteId, c]));
@@ -301,6 +309,7 @@ export function reconcile(input: ReconcileInput, options: ReconcileOptions = {})
       confidence: "high",
       auto: false,
       reason: "Association confirmée",
+      ref: link.ref,
     });
     noteIds.forEach((n) => openClaims.delete(n));
     lineIds.forEach((l) => openLines.delete(l));
@@ -333,7 +342,7 @@ export function reconcile(input: ReconcileInput, options: ReconcileOptions = {})
         const c = claimById.get(n)!;
         for (const id of openLines) {
           const l = lineById.get(id)!;
-          if (sameAmount(c.amount, l.amount) && daysBetween(c.date, l.date) <= windowFor(c)) {
+          if (allowed(c.noteId, l.id) && sameAmount(c.amount, l.amount) && daysBetween(c.date, l.date) <= windowFor(c)) {
             pairs.push({ c, l, s: pairScore(c, l) });
           }
         }
@@ -423,7 +432,7 @@ export function reconcile(input: ReconcileInput, options: ReconcileOptions = {})
     const freeLines = [...openLines].map((id) => lineById.get(id)!).filter((l) => l.amount > 0 && !ambiguous.has(l.id));
 
     for (const l of freeLines) {
-      const near = freeClaims.filter((c) => daysBetween(c.date, l.date) <= dateWindow && c.amount < l.amount);
+      const near = freeClaims.filter((c) => allowed(c.noteId, l.id) && daysBetween(c.date, l.date) <= dateWindow && c.amount < l.amount);
       for (const k of [2, 3]) {
         for (const group of combinations(near, k)) {
           if (!sameAmount(group.reduce((s, c) => s + c.amount, 0), l.amount)) continue;
@@ -433,7 +442,7 @@ export function reconcile(input: ReconcileInput, options: ReconcileOptions = {})
       }
     }
     for (const c of freeClaims) {
-      const near = freeLines.filter((l) => daysBetween(c.date, l.date) <= dateWindow && l.amount < c.amount);
+      const near = freeLines.filter((l) => allowed(c.noteId, l.id) && daysBetween(c.date, l.date) <= dateWindow && l.amount < c.amount);
       for (const k of [2, 3]) {
         for (const group of combinations(near, k)) {
           if (!sameAmount(group.reduce((s, l) => s + l.amount, 0), c.amount)) continue;
@@ -483,7 +492,7 @@ export function reconcile(input: ReconcileInput, options: ReconcileOptions = {})
   const nearMisses: { c: Claim; l: BankLine; diff: number }[] = [];
   for (const c of leftClaims) {
     for (const l of leftLines) {
-      if (daysBetween(c.date, l.date) > mismatchWindow) continue;
+      if (!allowed(c.noteId, l.id) || daysBetween(c.date, l.date) > mismatchWindow) continue;
       const kindOk = labelKind(l.label) === c.kind || kindScore(c, l) >= 3;
       const diff = l.amount - c.amount;
       const relative = Math.abs(diff) / Math.max(c.amount, l.amount);
@@ -518,6 +527,7 @@ export function reconcile(input: ReconcileInput, options: ReconcileOptions = {})
   for (const c of lateClaims) {
     const candidates = lateLines.filter(
       (l) =>
+        allowed(c.noteId, l.id) &&
         sameAmount(c.amount, l.amount) &&
         !suggestedNow.has(l.id) &&
         (looksLikeDateTypo(c.date, l.date) || daysBetween(c.date, l.date) <= 45) &&

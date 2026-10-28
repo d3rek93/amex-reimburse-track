@@ -116,6 +116,156 @@ export type Database = {
         }
         Relationships: []
       }
+      claim_batches: {
+        Row: {
+          created_at: string
+          declared_total: number
+          id: string
+          payment_date: string
+          ref: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          declared_total: number
+          id?: string
+          payment_date: string
+          ref: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          declared_total?: number
+          id?: string
+          payment_date?: string
+          ref?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      claim_lines: {
+        Row: {
+          amount_eur: number
+          batch_ref: string
+          category: string
+          created_at: string
+          id: string
+          line_date: string
+          note_id: string
+          payment_date: string
+          subcategory: string
+          user_id: string
+        }
+        Insert: {
+          amount_eur: number
+          batch_ref: string
+          category?: string
+          created_at?: string
+          id?: string
+          line_date: string
+          note_id: string
+          payment_date: string
+          subcategory?: string
+          user_id: string
+        }
+        Update: {
+          amount_eur?: number
+          batch_ref?: string
+          category?: string
+          created_at?: string
+          id?: string
+          line_date?: string
+          note_id?: string
+          payment_date?: string
+          subcategory?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      jetfly_transfers: {
+        Row: {
+          amount_eur: number
+          bank_transaction_id: string
+          created_at: string
+          date: string
+          id: string
+          label: string
+          user_id: string
+        }
+        Insert: {
+          amount_eur: number
+          bank_transaction_id: string
+          created_at?: string
+          date: string
+          id?: string
+          label?: string
+          user_id: string
+        }
+        Update: {
+          amount_eur?: number
+          bank_transaction_id?: string
+          created_at?: string
+          date?: string
+          id?: string
+          label?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      reconciliation_links: {
+        Row: {
+          comment: string | null
+          created_at: string
+          difference: number
+          expense_ids: string[]
+          id: string
+          note_ids: string[]
+          user_id: string
+        }
+        Insert: {
+          comment?: string | null
+          created_at?: string
+          difference?: number
+          expense_ids?: string[]
+          id?: string
+          note_ids?: string[]
+          user_id: string
+        }
+        Update: {
+          comment?: string | null
+          created_at?: string
+          difference?: number
+          expense_ids?: string[]
+          id?: string
+          note_ids?: string[]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      reconciliation_rejections: {
+        Row: {
+          created_at: string
+          expense_id: string
+          id: string
+          note_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          expense_id: string
+          id?: string
+          note_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          expense_id?: string
+          id?: string
+          note_id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       expenses: {
         Row: {
           amount_eur: number

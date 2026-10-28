@@ -197,12 +197,12 @@ export async function runBankSync(days = 120): Promise<SyncSummary> {
     .gte("date", from)
     .range(0, 9999);
   if (existingError) throw new Error(existingError.message);
-  const knownIds = new Set(
+  const knownIds = new Set<string>(
     (existing ?? []).map((e) => e.bank_transaction_id).filter(Boolean) as string[],
   );
-  // Lines that came from PDF/CSV/manual entry have no bank id: match them loosely.
+  // Lines that came from PDF/CSV/manual entry: match them loosely.
   const fileRows = (existing ?? [])
-    .filter((e) => !e.bank_transaction_id)
+    .filter((e) => !e.bank_transaction_id || /^(file|manual):/.test(e.bank_transaction_id))
     .map((e) => ({
       date: e.date as string,
       amount: Number(e.amount_eur),
@@ -260,6 +260,30 @@ export async function runBankSync(days = 120): Promise<SyncSummary> {
       bank_transaction_id: id,
     });
   };
+
+  // Money received from Jetfly: kept apart, to check each payment batch arrived.
+  const jetflyTransfers: { user_id: string; date: string; amount_eur: number; label: string; bank_transaction_id: string }[] = [];
+  for (const r of bourso) {
+    for (const t of r.transactions ?? []) {
+      const label = describeTransaction(t);
+      const amount = transactionAmount(t);
+      if (amount < 0 && /JETFLY/i.test(label) && String(t.transaction_status ?? "BOOK").toUpperCase() === "BOOK") {
+        jetflyTransfers.push({
+          user_id: userId,
+          date: transactionDate(t),
+          amount_eur: Math.round(-amount * 100) / 100,
+          label,
+          bank_transaction_id: bankTransactionId(r, t),
+        });
+      }
+    }
+  }
+  if (jetflyTransfers.length > 0) {
+    const { error: transferError } = await supabase
+      .from("jetfly_transfers")
+      .upsert(jetflyTransfers, { onConflict: "user_id,bank_transaction_id", ignoreDuplicates: true });
+    if (transferError) errors.push(`Virements Jetfly : ${transferError.message}`);
+  }
 
   for (const r of bourso) {
     for (const t of r.transactions ?? []) {

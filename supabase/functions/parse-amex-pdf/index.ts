@@ -80,36 +80,10 @@ serve(async (req) => {
     // Parse transactions from the text
     const transactions = parseAmexTransactions(text);
     
-    // Insert transactions into database
-    const { data: expenses, error: insertError } = await supabaseClient
-      .from('expenses')
-      .insert(
-        transactions.map(t => ({
-          user_id: user.id,
-          date: t.date,
-          description: t.description,
-          original_amount: t.originalAmount,
-          original_currency: t.originalCurrency,
-          conversion_fees: t.conversionFees,
-          amount_eur: t.amountEur,
-        }))
-      )
-      .select();
-
-    if (insertError) {
-      console.error('Insert error:', insertError);
-      return new Response(
-        JSON.stringify({ error: insertError.message }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
+    // Only read the statement: the app saves the lines itself, with the same
+    // duplicate checks as every other import.
     return new Response(
-      JSON.stringify({ 
-        success: true, 
-        transactionsCount: transactions.length,
-        expenses 
-      }),
+      JSON.stringify({ success: true, transactions }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
