@@ -448,24 +448,30 @@ export async function saveClaimStatement(lines: ParsedClaimLine[], batches: Pars
     fail(error);
   }
   if (lines.length === 0) return { added: 0, skipped: 0 };
-  const { data, error } = await supabase
+  // Lines already known (same note, batch and amount) are updated, not duplicated:
+  // a re-import fills in details an older import did not have (sub-category).
+  const { data: known, error: knownError } = await supabase
     .from("claim_lines")
-    .upsert(
-      lines.map((l) => ({
-        user_id: uid,
-        note_id: l.noteId,
-        line_date: l.date,
-        category: l.category,
-        subcategory: l.subcategory,
-        amount_eur: l.amount,
-        batch_ref: l.batchRef,
-        payment_date: l.paymentDate,
-      })),
-      { onConflict: "user_id,note_id,batch_ref,amount_eur", ignoreDuplicates: true },
-    )
-    .select("id");
+    .select("note_id, batch_ref, amount_eur")
+    .in("note_id", [...new Set(lines.map((l) => l.noteId))]);
+  fail(knownError);
+  const key = (n: string, b: string, a: number) => `${n}|${b}|${Number(a).toFixed(2)}`;
+  const existing = new Set((known ?? []).map((k) => key(k.note_id, k.batch_ref, k.amount_eur)));
+  const { error } = await supabase.from("claim_lines").upsert(
+    lines.map((l) => ({
+      user_id: uid,
+      note_id: l.noteId,
+      line_date: l.date,
+      category: l.category,
+      subcategory: l.subcategory,
+      amount_eur: l.amount,
+      batch_ref: l.batchRef,
+      payment_date: l.paymentDate,
+    })),
+    { onConflict: "user_id,note_id,batch_ref,amount_eur" },
+  );
   fail(error);
-  const added = data?.length ?? 0;
+  const added = lines.filter((l) => !existing.has(key(l.noteId, l.batchRef, l.amount))).length;
   return { added, skipped: lines.length - added };
 }
 
