@@ -519,7 +519,7 @@ export function reconcile(input: ReconcileInput, options: ReconcileOptions = {})
       difference: cents(m.diff),
       confidence: "low",
       auto: false,
-      reason: `Écart de ${cents(m.diff).toFixed(2)} € entre la dépense et la note`,
+      reason: `Écart de ${Math.abs(cents(m.diff)).toFixed(2).replace(".", ",")} € entre la dépense et la note`,
     });
   }
 
