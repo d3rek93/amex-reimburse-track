@@ -30,7 +30,13 @@ jobs:
       - name: Type check
         id: typecheck
         continue-on-error: true
-        run: npm run typecheck
+        # Errors become annotations so they can be read without the raw log.
+        run: |
+          set -o pipefail
+          npm run typecheck 2>&1 | tee typecheck.log
+          status=${PIPESTATUS[0]}
+          sed -nE 's/^([^(]+)\(([0-9]+),([0-9]+)\): error (TS[0-9]+): (.*)$/::error file=\1,line=\2,col=\3::\4 \5/p' typecheck.log | head -50
+          exit $status
 
       - name: Lint
         id: lint
