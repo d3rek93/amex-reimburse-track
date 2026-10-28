@@ -471,7 +471,6 @@ const Expenses = ({ embedded = false }: ExpensesProps = {}) => {
           });
           
           await loadExpenses();
-          setShowUploadDialog(false);
           return;
         }
       }
@@ -513,7 +512,6 @@ const Expenses = ({ embedded = false }: ExpensesProps = {}) => {
       });
 
       await loadExpenses();
-      setShowUploadDialog(false);
     } catch (error) {
       console.error('Error uploading file:', error);
       toast({
@@ -1388,7 +1386,7 @@ const Expenses = ({ embedded = false }: ExpensesProps = {}) => {
             <DialogTitle>Importer des fichiers</DialogTitle>
           </DialogHeader>
           <div className="py-4">
-            <ExpenseUpload onUpload={handleUpload} />
+            <ExpenseUpload onUpload={handleUpload} onComplete={() => setShowUploadDialog(false)} />
           </div>
         </DialogContent>
       </Dialog>
