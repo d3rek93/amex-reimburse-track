@@ -31,9 +31,10 @@ jobs:
       - run: npm install --no-save --no-audit --no-fund playwright@1 && npx playwright install --with-deps chromium
       - name: Capture
         run: |
-          npx vite preview --port 4173 --strictPort &
-          npx --yes wait-on http://localhost:4173 -t 60000
-          node tests/screens/capture.mjs http://localhost:4173 /tmp/screens
+          npx vite preview --port 4173 --strictPort > preview.log 2>&1 &
+          for i in $(seq 1 60); do curl -sf http://localhost:4173 >/dev/null && break; sleep 1; done
+          curl -sf http://localhost:4173 >/dev/null || { sed 's/^/::error::preview /' preview.log | head -20; exit 1; }
+          node tests/screens/capture.mjs http://localhost:4173 /tmp/screens 2> capture.err || { tr '\n' ' ' < capture.err | cut -c1-1500 | sed 's/^/::error::/'; echo; exit 1; }
       - name: Publish to ci-screenshots branch
         run: |
           cd /tmp/screens
