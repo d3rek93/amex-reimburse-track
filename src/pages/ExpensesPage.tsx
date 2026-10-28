@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { Loader2, Plus, Search, Trash2 } from "lucide-react";
+import { Loader2, Plus, RotateCcw, Search, Trash2 } from "lucide-react";
+import { MerchantRefund } from "@/components/ReconcileTools";
 import { AppLayout } from "@/components/AppLayout";
 import { ExpenseStatusPair, EXPENSE_STATUS_LABELS } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
@@ -25,6 +26,8 @@ export default function ExpensesPage() {
   const [to, setTo] = useState("");
   const [limit, setLimit] = useState(PAGE);
   const [adding, setAdding] = useState(false);
+  const [refunding, setRefunding] = useState<string | null>(null);
+  const canRefund = (id: string) => ["pending", "to_review"].includes(ledger?.expenseStatus.get(id) ?? "") && (ledger?.expenseById.get(id)?.amount_eur ?? 0) > 0;
 
   const rows = useMemo(() => {
     if (!ledger) return [];
@@ -128,6 +131,11 @@ export default function ExpensesPage() {
                     </div>
                     <div className="flex items-center justify-between gap-3">
                       <ExpenseStatusPair status={st} receivedOn={received(e.id)} />
+                      {canRefund(e.id) && (
+                        <Button size="sm" variant="ghost" className="h-7 ml-auto" onClick={() => setRefunding(e.id)}>
+                          Remboursée…
+                        </Button>
+                      )}
                       <label className="flex items-center gap-2 text-muted-foreground">
                         Perso
                         <Switch checked={e.is_personal} onCheckedChange={(v) => void togglePersonal(e.id, v)} />
@@ -175,12 +183,23 @@ export default function ExpensesPage() {
                           />
                         </td>
                         <td className="px-2 py-2">
+                          {canRefund(e.id) && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              aria-label="Remboursée par le commerçant"
+                              title="Remboursée par le commerçant (virement)"
+                              onClick={() => setRefunding(e.id)}
+                            >
+                              <RotateCcw className="h-4 w-4" />
+                            </Button>
+                          )}
                           {e.source === "Manuel" && (
                             <Button
                               size="icon"
                               variant="ghost"
-                              aria-label="Supprimer cette dépense"
-                              title="Supprimer cette dépense"
+                              aria-label={e.amount_eur < 0 ? "Annuler ce remboursement" : "Supprimer cette dépense"}
+                              title={e.amount_eur < 0 ? "Annuler ce remboursement" : "Supprimer cette dépense"}
                               onClick={() => void actions.deleteExpense(e.id)}
                             >
                               <Trash2 className="h-4 w-4" />
@@ -203,6 +222,10 @@ export default function ExpensesPage() {
         </div>
       )}
       <AddExpenseDialog open={adding} onOpenChange={setAdding} />
+      <MerchantRefund
+        expenses={refunding && ledger?.expenseById.get(refunding) ? [ledger.expenseById.get(refunding)!] : null}
+        onClose={() => setRefunding(null)}
+      />
     </AppLayout>
   );
 }

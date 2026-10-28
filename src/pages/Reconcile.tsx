@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { PayOtherwise, PickExpenses, SelectableRow, claimsOf, expensesOf, useRunner } from "@/components/ReconcileTools";
+import { MerchantRefund, PayOtherwise, PickExpenses, SelectableRow, claimsOf, expensesOf, useRunner } from "@/components/ReconcileTools";
 import { useLedger, useLedgerActions, type Ledger, type MatchView } from "@/lib/ledger";
 import type { Match } from "@/lib/reconciliation";
 import { categoryLabel, eur, shortDate, signedEur } from "@/lib/format";
@@ -457,6 +457,7 @@ function Unmatched({ ledger }: { ledger: Ledger }) {
   const [notesSel, setNotesSel] = useState<Set<string>>(new Set());
   const [expSel, setExpSel] = useState<Set<string>>(new Set());
   const [paying, setPaying] = useState(false);
+  const [refunding, setRefunding] = useState(false);
 
   const q = query.trim().toLowerCase().replace(",", ".");
   const matches = (text: string, amount: number) =>
@@ -490,7 +491,7 @@ function Unmatched({ ledger }: { ledger: Ledger }) {
       <p className="text-sm text-muted-foreground max-w-3xl">
         Ce qui n'a trouvé aucune correspondance. Coche une ou plusieurs notes et la ou les dépenses qui vont avec, puis
         associe-les. Une note réglée en espèces ou avec une autre carte : coche-la seule, puis « Payée autrement ». Une
-        dépense sans note peut aussi être perso.
+        dépense sans note peut être perso, ou avoir été remboursée par le commerçant par virement.
       </p>
       {hidden > 0 && <HistoryNotice ledger={ledger} hidden={hidden} />}
       <div className="relative max-w-sm">
@@ -540,6 +541,13 @@ function Unmatched({ ledger }: { ledger: Ledger }) {
         </Column>
       </div>
 
+      <MerchantRefund
+        expenses={refunding ? expensesOf(ledger, [...expSel]) : null}
+        onClose={(done) => {
+          setRefunding(false);
+          if (done) clear();
+        }}
+      />
       <PayOtherwise
         open={paying}
         notes={claimsOf(ledger, [...notesSel])}
@@ -569,6 +577,11 @@ function Unmatched({ ledger }: { ledger: Ledger }) {
               {notesSel.size > 0 && expSel.size === 0 && (
                 <Button variant="outline" size="sm" disabled={busy !== null} onClick={() => setPaying(true)}>
                   Payée autrement…
+                </Button>
+              )}
+              {expSel.size > 0 && notesSel.size === 0 && [...expSel].every((id) => (ledger.expenseById.get(id)?.amount_eur ?? 0) > 0) && (
+                <Button variant="outline" size="sm" disabled={busy !== null} onClick={() => setRefunding(true)}>
+                  Remboursée par le commerçant…
                 </Button>
               )}
               {expSel.size > 0 && notesSel.size === 0 && (

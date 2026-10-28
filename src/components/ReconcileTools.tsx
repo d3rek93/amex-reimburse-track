@@ -252,3 +252,45 @@ export function SelectableRow({
     </label>
   );
 }
+
+/** The merchant gave the money back by bank transfer (double charge, cancellation…). */
+export function MerchantRefund({ expenses, onClose }: { expenses: ExpenseRow[] | null; onClose: (done: boolean) => void }) {
+  const { refundedByMerchant } = useLedgerActions();
+  const { busy, run } = useRunner();
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const list = expenses ?? [];
+  const total = list.reduce((s, e) => s + e.amount_eur, 0);
+  return (
+    <Dialog open={expenses !== null} onOpenChange={(o) => !o && onClose(false)}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Remboursée par le commerçant</DialogTitle>
+          <DialogDescription>
+            {list.length === 1
+              ? `${list[0].description}, ${shortDate(list[0].date)} : ${eur(list[0].amount_eur)}`
+              : `${list.length} dépenses, ${eur(total)}`}
+            . Pour un remboursement reçu par virement sur Boursobank (double paiement, annulation…) : la dépense ne sera ni à
+            déclarer, ni due par Jetfly.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-1.5">
+          <label htmlFor="refund-date" className="text-sm font-medium">
+            Date du virement reçu
+          </label>
+          <Input id="refund-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-48" />
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => onClose(false)}>
+            Annuler
+          </Button>
+          <Button
+            disabled={busy !== null || list.length === 0 || !date}
+            onClick={() => run("refund", () => refundedByMerchant(list, date), "Remboursement enregistré").then(() => onClose(true))}
+          >
+            Enregistrer le remboursement
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}

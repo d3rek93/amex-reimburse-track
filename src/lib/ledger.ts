@@ -228,13 +228,21 @@ async function loadRaw(): Promise<RawData> {
 
 export function buildLedger(raw: RawData): Ledger {
   const expenseById = new Map(raw.expenses.map((e) => [e.id, e]));
+  // Refunds the merchant made outside the card (a bank transfer): recorded by hand
+  // as "manual:refund:<expense id>"; the pair is void and kept out of the engine.
+  const manualRefunds = new Map<string, string>();
+  for (const e of raw.expenses) {
+    const m = String(e.bank_transaction_id ?? "").match(/^manual:refund:([0-9a-f-]{36})/);
+    if (m && expenseById.has(m[1])) manualRefunds.set(m[1], e.id);
+  }
+  const manuallyVoid = new Set([...manualRefunds.keys(), ...manualRefunds.values()]);
   const lines: BankLine[] = raw.expenses.map((e) => ({
     id: e.id,
     date: e.date,
     amount: e.amount_eur,
     label: e.description,
     source: e.source ?? "AMEX",
-    personal: e.is_personal,
+    personal: e.is_personal || manuallyVoid.has(e.id),
   }));
   const claimLines: ClaimLine[] = raw.claimLines.map((l) => ({
     noteId: l.note_id,
@@ -271,7 +279,7 @@ export function buildLedger(raw: RawData): Ledger {
     m.noteIds.forEach((n) => matchOfNote.set(n, m));
   }
   const inSuggestion = new Set(result.suggestions.flatMap((s) => [...s.noteIds, ...s.lineIds]));
-  const neutralized = new Set(result.neutralized.flat());
+  const neutralized = new Set([...result.neutralized.flat(), ...manuallyVoid]);
 
   // Money received: which transfer paid back which expense.
   const activeTransfers = raw.transfers.filter((t) => !t.ignored);
@@ -308,7 +316,8 @@ export function buildLedger(raw: RawData): Ledger {
     const m = matchOfExpense.get(e.id);
     const paid = allocation.byLine.get(e.id);
     let status: ExpenseStatus;
-    if (e.is_personal) status = e.amount_eur < 0 ? "gain" : "personal";
+    if (manuallyVoid.has(e.id)) status = "neutralized";
+    else if (e.is_personal) status = e.amount_eur < 0 ? "gain" : "personal";
     else if (m) status = Math.abs(m.difference) >= 0.005 ? "discrepancy" : "validated";
     else if (neutralized.has(e.id)) status = "neutralized";
     else if (paid && paid.transferId && absentTransfers.has(paid.transferId)) status = "no_note";
@@ -549,6 +558,25 @@ export function useLedgerActions() {
         difference: Math.round(difference * 100) / 100,
         comment: comment ?? null,
       });
+      fail(error);
+    }),
+    /**
+     * The merchant paid the money back outside the card (bank transfer): records
+     * the refund so the expense is neither declared nor owed by Jetfly.
+     */
+    refundedByMerchant: run(async (expenses: ExpenseRow[], date: string) => {
+      if (expenses.length === 0) return;
+      const uid = await userId();
+      const { error } = await supabase.from("expenses").insert(
+        expenses.map((e) => ({
+          user_id: uid,
+          date,
+          description: `Remboursement - ${e.description} (virement du commerçant)`,
+          amount_eur: -e.amount_eur,
+          source: "Manuel",
+          bank_transaction_id: `manual:refund:${e.id}:${crypto.randomUUID()}`,
+        })),
+      );
       fail(error);
     }),
     setPersonal: run(async (expenseIds: string[], personal: boolean) => {
