@@ -1,5 +1,10 @@
 # Architecture rules
 
+- Expense and note statuses are never stored: `src/lib/ledger.ts` derives them by running `src/lib/reconciliation.ts` on bank lines (`expenses`), Jetfly statements (`claim_lines`, `claim_batches`), `jetfly_transfers` and the user's decisions (`reconciliation_links`, `reconciliation_rejections`, `expenses.is_personal`). The legacy columns `reimbursement_status`, `reimbursed_amount`, `expense_number`, `considered_complete` and the `reimbursements` table are no longer read.
+- The engine only auto-matches when a pair is each other's clear best candidate with the same amount; amount or date discrepancies are always suggestions. Claims are netted per note number (Jetfly corrects with negative lines).
+- Parsers live in `src/lib/importers.ts` (pure); tests in `tests/` run with `npm test` and use fictional data only — never commit real statements.
+- `tests/screens/` renders the built app with fictional data; `.github/workflows/screenshots.yml` pushes the images to the `ci-screenshots` branch.
+
 - Advance position is computed only in `src/lib/advance.ts` (`computeAdvancePosition`) — single source of truth, avoids divergent formulas.
 - The real bank balance comes from `account_snapshots`, written by the Boursobank CSV import — never ask the user to type a reference balance.
 - `balance_references` and `manual_transfers` are legacy and not used in the advance calculation — kept only to preserve history.
