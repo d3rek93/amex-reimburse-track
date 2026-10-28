@@ -109,7 +109,7 @@ function Content({ ledger }: { ledger: Ledger }) {
               {" "}
               Avance :{" "}
               <Link to="/advance" className="underline underline-offset-4 hover:text-foreground">
-                {advance.toTopUp > 0 ? `${eur(advance.toTopUp)} à remettre` : `${eur(-advance.toTopUp)} récupérables`}
+                {advance.toTopUp > 0 ? `il manque ${eur(advance.toTopUp)}` : `${eur(-advance.toTopUp)} à toi en plus`}
               </Link>{" "}
               (solde du {longDate(advance.snapshot.snapshot_date)}).
             </>

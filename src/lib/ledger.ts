@@ -378,12 +378,17 @@ export function buildLedger(raw: RawData): Ledger {
     }))
     .sort((a, b) => b.paymentDate.localeCompare(a.paymentDate));
 
-  // Advance: what Jetfly still owes = pro expenses not yet matched to a note.
+  // Expenses whose note Jetfly already paid, only the pairing is still to confirm
+  // (amount or date gap): not owed any more, whatever the user decides.
+  const notePaid = new Set(
+    result.suggestions.filter((x) => x.type === "mismatch" || x.type === "date_mismatch").flatMap((x) => x.lineIds),
+  );
+  // Advance: what Jetfly still owes = pro expenses not paid back yet.
   const advance = computeAdvancePosition(
     raw.snapshot,
     raw.expenses.map((e) => {
       const status = expenseStatus.get(e.id)!;
-      const reimbursed = ["validated", "discrepancy", "reimbursed", "no_note", "neutralized"].includes(status);
+      const reimbursed = ["validated", "discrepancy", "reimbursed", "no_note", "neutralized"].includes(status) || notePaid.has(e.id);
       return {
         id: e.id,
         date: e.date,
