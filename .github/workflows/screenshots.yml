@@ -1,0 +1,45 @@
+name: Screenshots
+
+# Renders the app with fictional data (tests/screens/fixtures.mjs) and pushes
+# the screenshots to the `ci-screenshots` branch for review.
+on:
+  workflow_dispatch:
+  push:
+    branches: [v2]
+    paths:
+      - "src/**"
+      - "tests/screens/**"
+      - ".github/workflows/screenshots.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: screenshots
+  cancel-in-progress: true
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - run: npm run build
+      - run: npm install --no-save --no-audit --no-fund playwright@1 && npx playwright install --with-deps chromium
+      - name: Capture
+        run: |
+          npx vite preview --port 4173 --strictPort &
+          npx --yes wait-on http://localhost:4173 -t 60000
+          node tests/screens/capture.mjs http://localhost:4173 /tmp/screens
+      - name: Publish to ci-screenshots branch
+        run: |
+          cd /tmp/screens
+          git init -q -b ci-screenshots
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          echo "Screenshots of ${GITHUB_SHA}" > README.md
+          git add -A && git commit -qm "Screenshots of ${GITHUB_SHA}"
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" ci-screenshots
