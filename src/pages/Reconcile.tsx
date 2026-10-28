@@ -332,7 +332,8 @@ function Unmatched({ ledger }: { ledger: Ledger }) {
     .filter((c) => matches(`${c.noteId} ${categoryLabel(c.category, c.subcategory)}`, c.amount))
     .sort((a, b) => b.date.localeCompare(a.date));
   const expenses = expensesOf(ledger, ledger.result.unmatchedLineIds)
-    .filter((e) => e.amount_eur > 0 && matches(e.description, e.amount_eur))
+    // Credit notes too: a purchase and its credit can make up one note.
+    .filter((e) => e.amount_eur !== 0 && matches(e.description, e.amount_eur))
     .sort((a, b) => b.date.localeCompare(a.date));
 
   const notesTotal = [...notesSel].reduce((s, n) => s + (ledger.claimById.get(n)?.amount ?? 0), 0);

@@ -459,6 +459,31 @@ export function reconcile(input: ReconcileInput, options: ReconcileOptions = {})
       }
     }
 
+    // A purchase later reduced by a credit note at the same merchant (class change,
+    // partial refund): the note claims the net amount.
+    const freeRefunds = [...openLines]
+      .map((id) => lineById.get(id)!)
+      .filter((l) => l.amount < 0 && !ambiguous.has(l.id));
+    for (const c of freeClaims) {
+      for (const buy of freeLines) {
+        if (buy.amount <= c.amount || !allowed(c.noteId, buy.id) || daysBetween(c.date, buy.date) > dateWindow) continue;
+        const key = merchantKey(buy.label);
+        const refunds = freeRefunds.filter(
+          (r) =>
+            merchantKey(r.label) === key &&
+            dayNumber(r.date) - dayNumber(buy.date) >= 0 &&
+            dayNumber(r.date) - dayNumber(buy.date) <= 60 &&
+            allowed(c.noteId, r.id),
+        );
+        for (const k of [1, 2]) {
+          for (const group of combinations(refunds, k)) {
+            if (!sameAmount(buy.amount + group.reduce((sum, r) => sum + r.amount, 0), c.amount)) continue;
+            combos.push({ noteIds: [c.noteId], lineIds: [buy.id, ...group.map((r) => r.id)], s: pairScore(c, buy), type: "combined" });
+          }
+        }
+      }
+    }
+
     // A combo is safe when none of its items appears in any other combo.
     const uses = new Map<string, number>();
     for (const combo of combos) for (const id of [...combo.noteIds, ...combo.lineIds]) uses.set(id, (uses.get(id) ?? 0) + 1);
@@ -480,7 +505,9 @@ export function reconcile(input: ReconcileInput, options: ReconcileOptions = {})
         reason:
           combo.type === "split"
             ? `${combo.noteIds.length} notes pour une dépense`
-            : `Une note pour ${combo.lineIds.length} dépenses`,
+            : lines.some((l) => l.amount < 0)
+              ? "Une note pour un achat et son avoir"
+              : `Une note pour ${combo.lineIds.length} dépenses`,
       };
       if (match.auto) {
         matches.push(match);

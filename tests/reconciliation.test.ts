@@ -256,3 +256,14 @@ test("one transfer covering two payments made the same week", () => {
   assert.ok(r.batches.every((b) => b.transferId === "T1"));
   assert.deepEqual(r.unmatchedTransferIds, []);
 });
+
+test("a purchase and its credit note match the net amount claimed", () => {
+  const buy = bank("2026-01-26", 96, "SNCF-VOYAGEURS SNCF436 PARIS");
+  const credit = bank("2026-01-27", -30.2, "SNCF-VOYAGEURS SNCF436 PARIS");
+  const r = reconcile({ lines: [buy, credit], claimLines: [note("533850", "2026-01-26", "Positionning", "Train", 65.8)] });
+  assert.equal(r.matches.length, 1);
+  assert.equal(r.matches[0].type, "combined");
+  assert.deepEqual([...r.matches[0].lineIds].sort(), [buy.id, credit.id].sort());
+  assert.equal(r.matches[0].reason, "Une note pour un achat et son avoir");
+  assert.deepEqual(r.unmatchedLineIds, []);
+});
