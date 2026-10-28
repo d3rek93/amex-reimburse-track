@@ -49,3 +49,20 @@ jobs:
         run: |
           ref=$(sed -n 's/^project_id = "\(.*\)"/\1/p' supabase/config.toml)
           supabase functions deploy --project-ref "$ref"
+
+      - name: Verify tables and functions respond
+        run: |
+          set -a; . ./.env; set +a
+          fail=0
+          for t in expenses reimbursements account_snapshots bank_sessions manual_transfers balance_references; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' -H "apikey: $VITE_SUPABASE_PUBLISHABLE_KEY" \
+              "$VITE_SUPABASE_URL/rest/v1/$t?select=id&limit=1")
+            echo "table $t: HTTP $code"; [ "$code" = "200" ] || fail=1
+          done
+          for f in enable-banking parse-amex-pdf; do
+            # No user token: a deployed function answers 401, a missing one 404.
+            code=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "apikey: $VITE_SUPABASE_PUBLISHABLE_KEY" \
+              "$VITE_SUPABASE_URL/functions/v1/$f")
+            echo "function $f: HTTP $code"; [ "$code" != "404" ] || fail=1
+          done
+          exit $fail
