@@ -21,7 +21,8 @@ import {
   startLink,
 } from "@/lib/bankSync";
 
-const PUBLISHED_ORIGIN = "https://amex-reimburse-track.lovable.app";
+// Bank redirects only work on the address registered with Enable Banking.
+const PUBLISHED_ORIGIN = (import.meta.env.VITE_APP_URL ?? "").replace(/\/$/, "");
 const SUGGESTED = ["Boursorama Banque", "American Express"];
 
 interface BankSyncDialogProps {
@@ -235,7 +236,7 @@ export const BankSyncDialog = ({
                   target="_blank"
                   rel="noreferrer"
                 >
-                  amex-reimburse-track.lovable.app
+                  {PUBLISHED_ORIGIN.replace(/^https?:\/\//, "")}
                 </a>
               </p>
             )}
