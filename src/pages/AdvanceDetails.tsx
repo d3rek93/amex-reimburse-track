@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 const AdvanceDetails = () => {
   const { ledger, isLoading } = useLedger();
   const pos = ledger?.advance;
+  const toSplit = ledger?.transferViews.filter((t) => t.status === "to_split").length ?? 0;
   const gains = ledger
     ? -ledger.expenses.filter((e) => ledger.expenseStatus.get(e.id) === "gain").reduce((s, e) => s + e.amount_eur, 0)
     : 0;
@@ -47,10 +48,30 @@ const AdvanceDetails = () => {
                 />
                 <Step label="CB Boursobank : achats pas encore débités" hint="Débit différé de fin de mois" value={-pos.cardUnpaid} />
                 <Subtotal label="Disponible aujourd'hui" value={pos.bankBalance - pos.amexUnpaid - pos.cardUnpaid} />
+                <tr>
+                  <td colSpan={2} className="pt-4" />
+                </tr>
                 <Step
-                  label="Jetfly te doit encore"
-                  hint={`${pos.owedExpenses.length} dépense${pos.owedExpenses.length > 1 ? "s" : ""} pro pas encore remboursée${pos.owedExpenses.length > 1 ? "s" : ""}, détail plus bas`}
+                  label="Dépenses pro pas encore rattachées à un remboursement"
+                  hint={`${pos.owedExpenses.length} dépense${pos.owedExpenses.length > 1 ? "s" : ""}, détail plus bas`}
                   value={pos.owedByJetfly}
+                />
+                {pos.receivedUnallocated > 0.005 && (
+                  <Step
+                    label="Virements Jetfly déjà reçus, pas encore répartis"
+                    hint={`${toSplit} virement${toSplit > 1 ? "s" : ""} : déjà dans le solde, ils remboursent une partie de ces dépenses. Le prochain relevé dira lesquelles.`}
+                    value={-pos.receivedUnallocated}
+                  />
+                )}
+                <Subtotal label="Jetfly te doit encore" value={pos.stillOwed} />
+                <tr>
+                  <td colSpan={2} className="pt-4" />
+                </tr>
+                <Step
+                  label="Disponible aujourd'hui + ce que Jetfly te doit encore"
+                  hint={`${eur(pos.bankBalance - pos.amexUnpaid - pos.cardUnpaid)} + ${eur(pos.stillOwed)}`}
+                  value={pos.position}
+                  first
                 />
                 <Subtotal label="Quand Jetfly sera à jour" value={pos.position} />
                 <Step label="Avance confiée par Jetfly" hint="À garder sur le compte" value={-pos.target} />
@@ -66,7 +87,7 @@ const AdvanceDetails = () => {
           </section>
 
           <section>
-            <h2 className="text-base font-semibold mb-2">Ce que Jetfly te doit encore ({pos.owedExpenses.length})</h2>
+            <h2 className="text-base font-semibold mb-2">Dépenses pro pas encore rattachées à un remboursement ({pos.owedExpenses.length})</h2>
             {pos.owedExpenses.length === 0 ? (
               <p className="text-sm text-muted-foreground">Aucune.</p>
             ) : (

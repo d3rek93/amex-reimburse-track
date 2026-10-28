@@ -62,7 +62,7 @@ export default function Dashboard() {
 
 function Content({ ledger }: { ledger: Ledger }) {
   const { advance, counts } = ledger;
-  const owed = advance.owedByJetfly;
+  const owed = advance.stillOwed;
   const empty = ledger.expenses.length === 0 && ledger.claims.length === 0;
 
   if (empty) {
@@ -96,8 +96,17 @@ function Content({ ledger }: { ledger: Ledger }) {
           {owed > 0.005 ? <>Jetfly te doit {eur(owed)}</> : <>Jetfly ne te doit plus rien</>}
         </p>
         <p className="text-muted-foreground">
-          {advance.owedExpenses.length} dépense{advance.owedExpenses.length > 1 ? "s" : ""} pro pas encore remboursée
-          {advance.owedExpenses.length > 1 ? "s" : ""}.
+          {advance.receivedUnallocated > 0.005 ? (
+            <>
+              {eur(advance.owedByJetfly)} de dépenses pro pas encore rattachées à un remboursement, moins{" "}
+              {eur(advance.receivedUnallocated)} de virements Jetfly déjà reçus mais pas encore répartis.
+            </>
+          ) : (
+            <>
+              {advance.owedExpenses.length} dépense{advance.owedExpenses.length > 1 ? "s" : ""} pro pas encore remboursée
+              {advance.owedExpenses.length > 1 ? "s" : ""}.
+            </>
+          )}
           {awaiting.n > 0 && (
             <>
               {" "}

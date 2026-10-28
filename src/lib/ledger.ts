@@ -401,6 +401,9 @@ export function buildLedger(raw: RawData): Ledger {
         source: e.source,
       };
     }),
+    undefined,
+    // Transfers received but not yet tied to expenses ("à répartir").
+    transferViews.filter((t) => t.status === "to_split").reduce((sum, t) => sum + t.amount_eur, 0),
   );
 
   const isDiscrepancy = (s: Match) => s.type === "mismatch" || s.type === "date_mismatch";

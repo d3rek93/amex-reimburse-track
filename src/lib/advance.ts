@@ -24,8 +24,17 @@ export interface AdvancePosition {
   target: number;
   snapshot: AccountSnapshot | null;
   bankBalance: number;
+  /** Pro expenses not tied to any Jetfly payment yet (gross). */
   owedByJetfly: number;
   owedExpenses: AdvanceExpense[];
+  /**
+   * Jetfly transfers already on the account that no expense is tied to yet
+   * (waiting for the statement to say which ones they pay). Already in the
+   * balance, so they reduce what is still owed.
+   */
+  receivedUnallocated: number;
+  /** What Jetfly really still owes: owedByJetfly − receivedUnallocated. */
+  stillOwed: number;
   amexUnpaid: number;
   amexUnpaidSince: string | null;
   cardUnpaid: number;
@@ -50,6 +59,7 @@ export function computeAdvancePosition(
   snapshot: AccountSnapshot | null,
   expenses: AdvanceExpense[],
   target = TARGET_ADVANCE,
+  receivedUnallocated = 0,
 ): AdvancePosition {
   const bankBalance = snapshot ? Number(snapshot.balance_eur) : 0;
   const cardUnpaid = snapshot ? Number(snapshot.pending_card_eur) : 0;
@@ -86,13 +96,17 @@ export function computeAdvancePosition(
   // donc l'entrée et la sortie s'annulent déjà dans le solde réel. Affiché à titre info seulement.
   const personalCardReimbursed = 0;
 
-  const position = bankBalance + owedByJetfly - amexUnpaid - cardUnpaid;
+  // Money Jetfly already sent counts once: in the balance, not again as owed.
+  const stillOwed = owedByJetfly - receivedUnallocated;
+  const position = bankBalance + stillOwed - amexUnpaid - cardUnpaid;
   return {
     target,
     snapshot,
     bankBalance,
     owedByJetfly,
     owedExpenses,
+    receivedUnallocated,
+    stillOwed,
     amexUnpaid,
     amexUnpaidSince,
     cardUnpaid,

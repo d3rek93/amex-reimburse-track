@@ -339,3 +339,16 @@ test("a transfer with several possible combinations is left to the statement", a
   assert.equal(a.byLine.size, 0);
   assert.deepEqual(a.unallocated, ["T"]);
 });
+
+test("advance: money received but not yet tied to expenses is not owed twice", async () => {
+  const { computeAdvancePosition } = await import("../src/lib/advance.ts");
+  const expense = (id: string, amount: number) => ({
+    id, date: "2026-10-20", description: "HOTEL", amount_eur: amount, reimbursed_amount: 0,
+    reimbursement_status: "pending", is_personal: false, considered_complete: false, source: "AMEX",
+  });
+  const snapshot = { snapshot_date: "2026-10-28", balance_eur: 2000, pending_card_eur: 0, amex_last_debit_date: null };
+  const p = computeAdvancePosition(snapshot, [expense("a", 300), expense("b", 200)], 1500, 300);
+  assert.equal(p.owedByJetfly, 500);
+  assert.equal(p.stillOwed, 200);
+  assert.equal(p.position, 2200);
+});
