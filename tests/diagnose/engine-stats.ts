@@ -46,3 +46,23 @@ out("rejected pairs: kinds of note", [...rejectedNotes].map((n) => claimById.get
 out("unmatched notes / lines", [r.unmatchedNoteIds.length, r.unmatchedLineIds.length]);
 out("unmatched notes by kind", count(r.unmatchedNoteIds, (n) => claimById.get(n)?.kind ?? "?"));
 out("batches with / without transfer", [r.batches.filter((b) => b.transferId).length, r.batches.filter((b) => !b.transferId).length]);
+
+// Payments without transfer, inside the Boursobank history: how far is the nearest same-amount transfer?
+const boursoDates = [
+  ...expenses.filter((e) => e.source === "Boursobank" || e.source === "Prélèvement").map((e) => String(e.date)),
+  ...transfers.map((t) => String(t.date)),
+].sort();
+const boursoStart = boursoDates[0] ?? "9999";
+const lost = r.batches.filter((b) => !b.transferId && b.total > 0 && b.paymentDate >= boursoStart);
+out("Boursobank history starts", boursoStart.slice(0, 7));
+out("payments without transfer inside history", lost.length);
+out(
+  "their nearest same-amount transfer (days after payment; null = none)",
+  lost.map((b) => {
+    const gaps = transfers
+      .filter((t) => Math.abs(Number(t.amount_eur) - b.total) < 0.005)
+      .map((t) => Math.round((Date.parse(String(t.date)) - Date.parse(b.paymentDate)) / 86400000));
+    return gaps.length ? gaps.sort((x, y) => Math.abs(x) - Math.abs(y))[0] : null;
+  }),
+);
+out("transfers without payment", r.unmatchedTransferIds.length);

@@ -111,7 +111,7 @@ export interface ReconcileOptions {
   dateWindow?: number;
   /** Max days for a discrepancy suggestion. */
   mismatchWindow?: number;
-  /** Max days between the Jetfly payment date and the transfer. */
+  /** Max days between the Jetfly payment date and the transfer (bank delays reach a week or more). */
   transferWindow?: number;
 }
 
@@ -285,7 +285,7 @@ const RECURRING: Kind[] = ["phone", "card_fee"];
 export function reconcile(input: ReconcileInput, options: ReconcileOptions = {}): ReconcileResult {
   const dateWindow = options.dateWindow ?? 3;
   const mismatchWindow = options.mismatchWindow ?? 2;
-  const transferWindow = options.transferWindow ?? 5;
+  const transferWindow = options.transferWindow ?? 20;
   const rules = input.rules ?? {};
   const rejected = new Set((input.rejected ?? []).map((r) => `${r.noteId}|${r.lineId}`));
   const allowed = (noteId: string, lineId: string) => !rejected.has(`${noteId}|${lineId}`);
@@ -570,17 +570,34 @@ export function reconcile(input: ReconcileInput, options: ReconcileOptions = {})
   const batches = [...batchMap.values()].sort((a, b) => a.paymentDate.localeCompare(b.paymentDate) || a.ref.localeCompare(b.ref));
   const freeTransfers = new Set((input.transfers ?? []).map((t) => t.id));
   const transfers = (input.transfers ?? []).slice().sort((a, b) => a.date.localeCompare(b.date));
-  for (const b of batches) {
-    const candidate = transfers.find(
-      (t) =>
-        freeTransfers.has(t.id) &&
-        sameAmount(t.amount, b.total) &&
-        dayNumber(t.date) - dayNumber(b.paymentDate) >= 0 &&
-        dayNumber(t.date) - dayNumber(b.paymentDate) <= transferWindow,
-    );
-    if (candidate) {
-      b.transferId = candidate.id;
-      freeTransfers.delete(candidate.id);
+  const gap = (b: BatchStatus, t: Transfer) => dayNumber(t.date) - dayNumber(b.paymentDate);
+  const inWindow = (b: BatchStatus, t: Transfer) => gap(b, t) >= 0 && gap(b, t) <= transferWindow;
+
+  // Same amount: closest pairs first, so a late transfer never steals a later batch's.
+  const pairs = batches
+    .flatMap((b) => transfers.filter((t) => sameAmount(t.amount, b.total) && inWindow(b, t)).map((t) => ({ b, t, d: gap(b, t) })))
+    .sort((x, y) => x.d - y.d || x.b.paymentDate.localeCompare(y.b.paymentDate));
+  for (const { b, t } of pairs) {
+    if (b.transferId || !freeTransfers.has(t.id)) continue;
+    b.transferId = t.id;
+    freeTransfers.delete(t.id);
+  }
+
+  // One transfer for several payments made within a few days of each other.
+  for (const t of transfers) {
+    if (!freeTransfers.has(t.id)) continue;
+    const open = batches.filter((b) => !b.transferId && b.total > 0 && inWindow(b, t));
+    for (const k of [2, 3]) {
+      const group = combinations(open, k).find(
+        (g) =>
+          sameAmount(g.reduce((sum, b) => sum + b.total, 0), t.amount) &&
+          dayNumber(g[g.length - 1].paymentDate) - dayNumber(g[0].paymentDate) <= 3,
+      );
+      if (group) {
+        group.forEach((b) => (b.transferId = t.id));
+        freeTransfers.delete(t.id);
+        break;
+      }
     }
   }
 

@@ -223,3 +223,36 @@ test("after a rejection, no other date guess is offered for the same note", () =
   const second = reconcile({ lines: [a, b], claimLines, rejected });
   assert.equal(second.suggestions.length, 0);
 });
+
+test("a transfer a week late still finds its payment, closest pairs first", () => {
+  const r = reconcile({
+    lines: [],
+    claimLines: [
+      note("100021", "2026-06-29", "Hotel", "Night", 722.26, "MOS 20260630 0942", "2026-06-30"),
+      note("100022", "2026-07-01", "Hotel", "Night", 180, "MOS 20260701 1000", "2026-07-01"),
+      note("100023", "2026-07-02", "Hotel", "Night", 180, "MOS 20260703 1000", "2026-07-03"),
+    ],
+    transfers: [
+      { id: "T1", date: "2026-07-07", amount: 722.26 },
+      { id: "T2", date: "2026-07-04", amount: 180 },
+      { id: "T3", date: "2026-07-02", amount: 180 },
+    ],
+  });
+  const byRef = Object.fromEntries(r.batches.map((b) => [b.ref, b.transferId]));
+  assert.equal(byRef["MOS 20260630 0942"], "T1");
+  assert.equal(byRef["MOS 20260701 1000"], "T3");
+  assert.equal(byRef["MOS 20260703 1000"], "T2");
+});
+
+test("one transfer covering two payments made the same week", () => {
+  const r = reconcile({
+    lines: [],
+    claimLines: [
+      note("100024", "2026-08-25", "Positionning", "Taxi", 43, "MOS 20260826 1137", "2026-08-26"),
+      note("100025", "2026-08-25", "Meal", "Dinner", 11.5, "MOS 20260827 0958", "2026-08-27"),
+    ],
+    transfers: [{ id: "T1", date: "2026-08-28", amount: 54.5 }],
+  });
+  assert.ok(r.batches.every((b) => b.transferId === "T1"));
+  assert.deepEqual(r.unmatchedTransferIds, []);
+});
