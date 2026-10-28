@@ -14,7 +14,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       # npm install (not ci) so the lockfile follows package.json changes;
       # the refreshed lockfile is uploaded below to be committed.
