@@ -279,6 +279,19 @@ export async function runBankSync(days = 120): Promise<SyncSummary> {
     }
   }
   if (jetflyTransfers.length > 0) {
+    // A file import may hold the same transfers: replace those copies by the bank ones.
+    const { data: fileCopies } = await supabase
+      .from("jetfly_transfers")
+      .select("id, date, amount_eur")
+      .like("bank_transaction_id", "file:%");
+    const days = (a: string, b: string) => Math.abs(Date.parse(a) - Date.parse(b)) / 86400000;
+    const pool = [...(fileCopies ?? [])];
+    const stale: string[] = [];
+    for (const t of jetflyTransfers) {
+      const i = pool.findIndex((f) => Math.abs(Number(f.amount_eur) - t.amount_eur) < 0.005 && days(f.date, t.date) <= 2);
+      if (i >= 0) stale.push(pool.splice(i, 1)[0].id);
+    }
+    if (stale.length > 0) await supabase.from("jetfly_transfers").delete().in("id", stale);
     const { error: transferError } = await supabase
       .from("jetfly_transfers")
       .upsert(jetflyTransfers, { onConflict: "user_id,bank_transaction_id", ignoreDuplicates: true });

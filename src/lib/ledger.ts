@@ -629,9 +629,26 @@ export async function saveFileExpenses(rows: ParsedExpense[]): Promise<SaveSumma
   return { added: fresh.length, skipped: rows.length - fresh.length };
 }
 
-export async function saveTransfers(rows: ParsedTransfer[]): Promise<SaveSummary> {
-  if (rows.length === 0) return { added: 0, skipped: 0 };
+export async function saveTransfers(input: ParsedTransfer[]): Promise<SaveSummary> {
+  if (input.length === 0) return { added: 0, skipped: 0 };
   const uid = await userId();
+  // Transfers the bank sync already brought in (same amount, a day or two apart) are skipped.
+  const { data: known, error: knownError } = await supabase
+    .from("jetfly_transfers")
+    .select("date, amount_eur, bank_transaction_id")
+    .not("bank_transaction_id", "like", "file:%");
+  fail(knownError);
+  const bankRows = (known ?? []).map((k) => ({ date: k.date, amount: Number(k.amount_eur) }));
+  const days = (a: string, b: string) => Math.abs(Date.parse(a) - Date.parse(b)) / 86400000;
+  const rows = input.filter((t) => {
+    const i = bankRows.findIndex((b) => Math.abs(b.amount - t.amount) < 0.005 && days(b.date, t.date) <= 2);
+    if (i >= 0) {
+      bankRows.splice(i, 1);
+      return false;
+    }
+    return true;
+  });
+  if (rows.length === 0) return { added: 0, skipped: input.length };
   const { data, error } = await supabase
     .from("jetfly_transfers")
     .upsert(
@@ -640,7 +657,7 @@ export async function saveTransfers(rows: ParsedTransfer[]): Promise<SaveSummary
     )
     .select("id");
   fail(error);
-  return { added: data?.length ?? 0, skipped: rows.length - (data?.length ?? 0) };
+  return { added: data?.length ?? 0, skipped: input.length - (data?.length ?? 0) };
 }
 
 export async function saveSnapshot(s: ParsedSnapshot): Promise<void> {
