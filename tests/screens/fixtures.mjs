@@ -39,6 +39,7 @@ export const expenses = [
   exp("2026-08-23", "SNCF-VOYAGEURS PARIS", 73),
   exp("2026-08-23", "SNCF-VOYAGEURS PARIS", 73),
   exp("2026-08-12", "CINEMA UTOPIA", 11.5, "AMEX", { is_personal: true }),
+  exp("2026-09-25", "TAXI G7 EMV2 CLICHY", 25.1),
   exp("2026-09-12", "CINEMA UTOPIA", 12),
 ];
 
@@ -63,6 +64,8 @@ export const claim_lines = [
   line("593336", "2026-09-11", "Other", "Postage", 2.25, "DEMO 20260914 0908", "2026-09-14"),
   line("589008", "2026-06-25", "Positionning", "Taxi", 43, "DEMO 20260826 1137", "2026-08-26"),
   line("588499", "2026-08-24", "Positionning", "Train", 73, "DEMO 20260826 1137", "2026-08-26"),
+  line("599799", "2026-09-25", "Positionning", "Taxi", 25.1, "DEMO 20260926 1000", "2026-09-26"),
+  line("599799", "2026-09-25", "Positionning", "Taxi", -0.01, "DEMO 20261013 0950", "2026-10-13"),
   line("574421", "2026-06-29", "Meal", "Lunch", 9, "DEMO 20260630 0942", "2026-06-30"),
   line("574421", "2026-06-29", "Meal", "Lunch", -9, "DEMO 20260826 1137", "2026-08-26"),
 ];

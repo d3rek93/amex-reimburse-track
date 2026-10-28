@@ -44,17 +44,19 @@ export function PairStrip({
             <Empty>Aucune note Jetfly</Empty>
           ) : (
             notes.map((n) => (
-              <Row
-                key={n.noteId}
-                left={
-                  <>
-                    <span className="font-medium">{categoryLabel(n.category, n.subcategory)}</span>
-                    <span className="text-muted-foreground"> · note {n.noteId}</span>
-                  </>
-                }
-                date={n.date}
-                amount={n.amount}
-              />
+              <div key={n.noteId}>
+                <Row
+                  left={
+                    <>
+                      <span className="font-medium">{categoryLabel(n.category, n.subcategory)}</span>
+                      <span className="text-muted-foreground"> · note {n.noteId}</span>
+                    </>
+                  }
+                  date={n.date}
+                  amount={n.amount}
+                />
+                {n.lines.length > 1 && <Corrections lines={n.lines} />}
+              </div>
             ))
           )}
         </Side>
@@ -105,6 +107,23 @@ export function PairStrip({
         <div className={cn("border-t px-4 flex flex-wrap items-center gap-2", dense ? "py-1" : "py-2.5")}>{footer}</div>
       )}
     </div>
+  );
+}
+
+/** A note Jetfly corrected later: show each payment line so the net amount is traceable. */
+function Corrections({ lines }: { lines: Claim["lines"] }) {
+  const sorted = [...lines].sort((a, b) => a.paymentDate.localeCompare(b.paymentDate));
+  return (
+    <ul className="ml-[4.25rem] mt-0.5 space-y-0.5 text-xs text-muted-foreground">
+      {sorted.map((l, i) => (
+        <li key={`${l.batchRef}-${i}`} className="flex gap-2 tabular-nums">
+          <span className="flex-1">
+            {l.amount >= 0 ? "Payé" : "Repris"} par Jetfly le {shortDate(l.paymentDate)} ({l.batchRef})
+          </span>
+          <span>{l.amount >= 0 ? "+" : "−"} {eur(Math.abs(l.amount))}</span>
+        </li>
+      ))}
+    </ul>
   );
 }
 
