@@ -4,6 +4,9 @@ name: Diagnose data
 # never amounts, labels or other personal data.
 on:
   workflow_dispatch:
+  push:
+    branches: [v2]
+    paths: [".github/workflows/diagnose.yml"]
 
 jobs:
   diagnose:
