@@ -63,15 +63,3 @@ jobs:
           note "date range bank-sync / files" "select source, split_part(bank_transaction_id, ':', 1) = 'file' as from_file, min(to_char(date, 'YYYY-MM')), max(to_char(date, 'YYYY-MM')) from expenses group by 1, 2 order by 1, 2"
 # rerun 1793194851
 # rerun 1793196749
-      - name: Lookup 330.60 (temporary, asked by the user)
-        run: |
-          ref=$(sed -n 's/^project_id = "\(.*\)"/\1/p' supabase/config.toml)
-          q() {
-            curl -s -X POST "https://api.supabase.com/v1/projects/$ref/database/query" \
-              -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" -H "Content-Type: application/json" \
-              -d "$(jq -n --arg q "$1" '{query: $q}')"
-          }
-          echo "::notice::batch MOS 20260302 1352: $(q "select note_id, line_date, category, subcategory, amount_eur from claim_lines where batch_ref = 'MOS 20260302 1352' order by note_id" | jq -c '.')"
-          echo "::notice::notes 540864/543252 all lines: $(q "select note_id, amount_eur, batch_ref from claim_lines where note_id in ('540864','543252')" | jq -c '.')"
-          echo "::notice::notes dated 2026-02-19..21: $(q "select note_id, line_date, category, subcategory, amount_eur, batch_ref from claim_lines where line_date between '2026-02-19' and '2026-02-21' order by line_date, note_id" | jq -c '.')"
-          echo "::notice::expenses 2026-02-18..23 over 100: $(q "select date, source, left(description, 40) as label, amount_eur from expenses where date between '2026-02-18' and '2026-02-23' and abs(amount_eur) >= 100 order by date" | jq -c '.')"

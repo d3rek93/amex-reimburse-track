@@ -71,6 +71,8 @@ export interface Claim {
   amount: number;
   lines: ClaimLine[];
   cancelled: boolean;
+  /** Note number this one cancels, or is cancelled by (Jetfly sometimes uses a new number). */
+  cancelledWith?: string;
 }
 
 export type MatchType = "confirmed" | "exact" | "split" | "combined" | "mismatch" | "date_mismatch" | "complete";
@@ -238,6 +240,30 @@ export function buildClaims(claimLines: ClaimLine[]): Claim[] {
       lines,
       cancelled: Math.abs(amount) < EPS,
     });
+  }
+  // A purely negative note under its own number cancels an earlier note of the
+  // same amount declared around the same day: both are void.
+  for (const neg of claims.filter((c) => c.amount < 0 && c.lines.every((l) => l.amount < 0))) {
+    const firstPaid = (c: Claim) => c.lines.map((l) => l.paymentDate).sort()[0];
+    const target = claims
+      .filter(
+        (c) =>
+          !c.cancelled &&
+          c.amount > 0 &&
+          sameAmount(c.amount, -neg.amount) &&
+          daysBetween(c.date, neg.date) <= 5 &&
+          firstPaid(c) <= firstPaid(neg),
+      )
+      .sort(
+        (a, b) =>
+          Number(b.category === neg.category) - Number(a.category === neg.category) ||
+          daysBetween(a.date, neg.date) - daysBetween(b.date, neg.date),
+      )[0];
+    if (!target) continue;
+    target.cancelled = true;
+    target.cancelledWith = neg.noteId;
+    neg.cancelled = true;
+    neg.cancelledWith = target.noteId;
   }
   return claims.sort((a, b) => a.date.localeCompare(b.date) || a.noteId.localeCompare(b.noteId));
 }

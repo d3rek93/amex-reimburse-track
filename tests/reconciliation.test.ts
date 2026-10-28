@@ -281,3 +281,23 @@ test("a credit note that closes the gap of a validated association is proposed",
   assert.deepEqual(s!.lineIds, [credit.id]);
   assert.equal(s!.ref, "link-1");
 });
+
+test("a negative note under another number cancels the duplicate it voids", () => {
+  const line = bank("2026-02-21", 333.6, "SUMUP*PASSIONFOODCATERI EICHWALDE");
+  const r = reconcile({
+    lines: [line],
+    claimLines: [
+      note("540864", "2026-02-20", "Catering", "Catering", 330.6, "MOS 20260223 0830", "2026-02-23"),
+      note("543249", "2026-02-20", "Catering", "Catering", 333.6, "MOS 20260302 1352", "2026-03-02"),
+      note("543252", "2026-02-20", "Meal", "Lunch", -330.6, "MOS 20260302 1352", "2026-03-02"),
+    ],
+  });
+  const byId = Object.fromEntries(r.claims.map((c) => [c.noteId, c]));
+  assert.equal(byId["540864"].cancelled, true);
+  assert.equal(byId["540864"].cancelledWith, "543252");
+  assert.equal(byId["543252"].cancelled, true);
+  assert.equal(byId["543249"].cancelled, false);
+  assert.deepEqual(r.matches.map((m) => m.noteIds), [["543249"]]);
+  assert.deepEqual(r.unmatchedNoteIds, []);
+  assert.deepEqual(r.suggestions, []);
+});

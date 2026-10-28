@@ -47,6 +47,14 @@ export function NoteDetails({ ledger, noteId, onClose }: { ledger: Ledger; noteI
           </DialogDescription>
         </DialogHeader>
 
+        {note.cancelledWith && (
+          <p className="text-sm rounded-md bg-muted/60 px-3 py-2">
+            {note.amount < 0
+              ? `Cette note négative annule la note ${note.cancelledWith}, déposée en double ou avec un mauvais montant.`
+              : `Annulée par la note négative ${note.cancelledWith} : ne compte plus dans les remboursements.`}
+          </p>
+        )}
+
         <section>
           <h3 className="text-sm font-semibold mb-1.5">Paiements Jetfly</h3>
           <table className="w-full text-sm">
