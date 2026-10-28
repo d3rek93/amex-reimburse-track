@@ -219,25 +219,50 @@ serve(async (req) => {
             const balances = await eb(
               `/accounts/${encodeURIComponent(uid)}/balances`
             );
-            const transactions = await eb(
-              `/accounts/${encodeURIComponent(
-                uid
-              )}/transactions?date_from=${dateFrom}`
-            );
+            // Banks return transactions in pages; follow continuation_key to the end.
+            const transactions: unknown[] = [];
+            let continuationKey: string | null = null;
+            let pages = 0;
+            do {
+              const qs = new URLSearchParams({ date_from: dateFrom });
+              if (continuationKey) qs.set("continuation_key", continuationKey);
+              const page = await eb(
+                `/accounts/${encodeURIComponent(uid)}/transactions?${qs}`
+              );
+              transactions.push(...(page.transactions ?? []));
+              continuationKey = page.continuation_key || null;
+              pages += 1;
+            } while (continuationKey && pages < 50);
             results.push({
               session_id: row.session_id,
               aspsp_name: row.aspsp_name ?? null,
               account,
               balances,
-              transactions: transactions.transactions ?? [],
-              next_uri: transactions.next_uri ?? null,
+              transactions,
+              pages,
             });
           } catch (err) {
             errors.push(`${uid}: ${(err as Error).message}`);
           }
         }
       }
-      console.log("sync results", JSON.stringify(results).slice(0, 2000));
+      await client
+        .from("bank_sessions")
+        .update({ last_synced_at: new Date().toISOString() })
+        .eq("user_id", userId);
+      // Log shapes only, never amounts or labels.
+      console.log(
+        "sync summary",
+        JSON.stringify(
+          (results as Array<Record<string, any>>).map((r) => ({
+            aspsp: r.aspsp_name,
+            product: r.account?.product,
+            pages: r.pages,
+            transactions: r.transactions.length,
+            keys: Object.keys(r.transactions[0] ?? {}),
+          }))
+        )
+      );
       return json({ results, errors, dateFrom });
     }
 

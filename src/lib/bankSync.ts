@@ -16,7 +16,7 @@ export interface BankSyncResult {
   account: BankAccount;
   balances?: { balances?: BankBalance[] };
   transactions?: BankTransaction[];
-  next_uri?: string | null;
+  pages?: number;
 }
 
 interface BankBalance {
@@ -124,6 +124,46 @@ export interface SyncSummary {
   accounts: number;
 }
 
+interface NewExpenseRow {
+  user_id: string;
+  date: string;
+  description: string;
+  amount_eur: number;
+  original_amount: number | null;
+  original_currency: string | null;
+  reimbursement_status: string;
+  reimbursed_amount: number;
+  is_personal: boolean;
+  considered_complete: boolean;
+  source: string;
+  bank_transaction_id: string;
+}
+
+/** Monthly settlement of the AMEX card (shows on the card account as a credit). */
+export function isAmexCardPayment(description: string): boolean {
+  return /PRELEVEMENT AUTOMATIQUE|PAIEMENT RE[CÇ]U|PAYMENT RECEIVED|MERCI POUR VOTRE PAIEMENT/i.test(description);
+}
+
+/** Stable identity of a bank line: account + bank id (or its content when the bank gives none). */
+export function bankTransactionId(r: BankSyncResult, t: BankTransaction): string {
+  const account = String(r.account.uid ?? r.account.iban ?? "");
+  const own = (t.transaction_id as string | undefined) ?? (t.entry_reference as string | undefined);
+  if (own) return `${account}:${own}`;
+  return `${account}:${transactionDate(t)}|${transactionAmount(t).toFixed(2)}|${describeTransaction(t)}`;
+}
+
+/** Amount in the purchase currency, when the bank reports a foreign-currency payment. */
+export function foreignAmount(t: BankTransaction): { amount: number; currency: string } | null {
+  const fx = t.exchange_rate as
+    | { instructed_amount?: { amount?: string | number; currency?: string } }
+    | undefined;
+  const instructed = fx?.instructed_amount;
+  const currency = String(instructed?.currency ?? "").toUpperCase();
+  if (!instructed || !currency || currency === "EUR") return null;
+  const amount = Math.abs(num(instructed.amount));
+  return amount ? { amount, currency } : null;
+}
+
 /**
  * Pulls the linked bank account and stores what it finds:
  * expenses (deduplicated against what is already there) and the real balance.
@@ -141,75 +181,102 @@ export async function runBankSync(days = 120): Promise<SyncSummary> {
   const userId = sessionData.session?.user.id;
   if (!userId) throw new Error("Vous devez être connecté");
 
-  // Only Boursobank accounts feed expenses and balance (AMEX stays on file import).
-  const bourso = results.filter((r) => !/american express/i.test(r.aspsp_name ?? ""));
+  const isAmex = (r: BankSyncResult) => /american express|amex/i.test(r.aspsp_name ?? "");
+  const amex = results.filter(isAmex);
+  const bourso = results.filter((r) => !isAmex(r));
   const isCardAccount = (r: BankSyncResult) =>
     /carte|card|ultim/i.test(`${r.account.product ?? ""} ${r.account.name ?? ""}`);
   const mainAccounts = bourso.filter((r) => !isCardAccount(r));
   const cardAccounts = bourso.filter(isCardAccount);
-  const transactions = bourso.flatMap((r) => r.transactions ?? []);
   const from = new Date(Date.now() - (days + 60) * 86400000).toISOString().slice(0, 10);
 
-  const { data: existing } = await supabase
+  const { data: existing, error: existingError } = await supabase
     .from("expenses")
-    .select("date, amount_eur, description")
+    .select("date, amount_eur, description, bank_transaction_id")
     .eq("user_id", userId)
-    .gte("date", from);
-  const existingRows = (existing ?? []).map((e) => ({
-    date: e.date as string,
-    amount: Number(e.amount_eur),
-    merchant: merchantKey(e.description),
-  }));
-  const isDuplicate = (date: string, amount: number, description: string) => {
+    .gte("date", from)
+    .range(0, 9999);
+  if (existingError) throw new Error(existingError.message);
+  const knownIds = new Set(
+    (existing ?? []).map((e) => e.bank_transaction_id).filter(Boolean) as string[],
+  );
+  // Lines that came from PDF/CSV/manual entry have no bank id: match them loosely.
+  const fileRows = (existing ?? [])
+    .filter((e) => !e.bank_transaction_id)
+    .map((e) => ({
+      date: e.date as string,
+      amount: Number(e.amount_eur),
+      merchant: merchantKey(e.description),
+    }));
+  const matchesFileRow = (date: string, amount: number, description: string, windowDays: number) => {
     const m = merchantKey(description);
     const t = Date.parse(date);
-    return existingRows.some(
+    const i = fileRows.findIndex(
       (e) =>
         Math.abs(e.amount - amount) < 0.005 &&
-        Math.abs(Date.parse(e.date) - t) <= 45 * 86400000 &&
-        (e.merchant === m || !m || !e.merchant || e.merchant.startsWith(m.slice(0, 6)) || m.startsWith(e.merchant.slice(0, 6)))
+        Math.abs(Date.parse(e.date) - t) <= windowDays * 86400000 &&
+        (e.merchant === m || !m || !e.merchant ||
+          e.merchant.startsWith(m.slice(0, 6)) || m.startsWith(e.merchant.slice(0, 6))),
     );
+    if (i >= 0) fileRows.splice(i, 1); // one file row matches one bank line at most
+    return i >= 0;
   };
-
-interface NewExpenseRow {
-  user_id: string;
-  date: string;
-  description: string;
-  amount_eur: number;
-  reimbursement_status: string;
-  reimbursed_amount: number;
-  is_personal: boolean;
-  considered_complete: boolean;
-  source: string;
-}
 
   const rows: NewExpenseRow[] = [];
   let skipped = 0;
-  for (const t of transactions) {
+  const push = (
+    r: BankSyncResult,
+    t: BankTransaction,
+    source: string,
+    accept: (description: string) => boolean,
+    windowDays: number,
+  ) => {
+    // Pending lines change id once booked: wait until the bank books them.
+    const status = String(t.transaction_status ?? "BOOK").toUpperCase();
     const date = operationDate(t);
     const description = describeTransaction(t);
     const amount = transactionAmount(t);
-    if (!date || !isBankExpenseLine(description) || amount === 0 || isSettlementLine(description)) {
+    const id = bankTransactionId(r, t);
+    if (status !== "BOOK" || !date || amount === 0 || !accept(description) ||
+        knownIds.has(id) || matchesFileRow(date, amount, description, windowDays)) {
       skipped += 1;
-      continue;
+      return;
     }
-    if (isDuplicate(date, amount, description)) {
-      skipped += 1;
-      continue;
-    }
-    existingRows.push({ date, amount, merchant: merchantKey(description) });
+    knownIds.add(id);
     const isRefund = amount < 0;
+    const fx = foreignAmount(t);
     rows.push({
       user_id: userId,
       date,
       description: isRefund ? `Remboursement - ${description}` : description,
       amount_eur: amount,
+      original_amount: fx ? (isRefund ? -fx.amount : fx.amount) : null,
+      original_currency: fx?.currency ?? null,
       reimbursement_status: isRefund ? "complete" : "pending",
       reimbursed_amount: 0,
       is_personal: false,
       considered_complete: false,
-      source: /PRLV|PR[LÉ]VEMENT/i.test(description) ? "Prélèvement" : "Boursobank",
+      source,
+      bank_transaction_id: id,
     });
+  };
+
+  for (const r of bourso) {
+    for (const t of r.transactions ?? []) {
+      push(
+        r,
+        t,
+        /PRLV|PR[LÉ]VEMENT/i.test(describeTransaction(t)) ? "Prélèvement" : "Boursobank",
+        (d) => isBankExpenseLine(d) && !isSettlementLine(d),
+        45,
+      );
+    }
+  }
+  for (const r of amex) {
+    for (const t of r.transactions ?? []) {
+      // Every AMEX line is a purchase or a refund, except the monthly payment.
+      push(r, t, "AMEX", (d) => !isAmexCardPayment(d), 5);
+    }
   }
 
   if (rows.length > 0) {
@@ -269,7 +336,7 @@ interface NewExpenseRow {
     balance,
     snapshotDate,
     errors,
-    accounts: bourso.length,
+    accounts: results.length,
   };
 }
 
