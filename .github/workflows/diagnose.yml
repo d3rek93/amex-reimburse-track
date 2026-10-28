@@ -68,3 +68,16 @@ jobs:
 # rerun 1793201022
 # rerun 1793201067
 # rerun 1793201250
+      - name: Advance terms (aggregates, asked by the user)
+        run: |
+          ref=$(sed -n 's/^project_id = "\(.*\)"/\1/p' supabase/config.toml)
+          mkdir -p /tmp/adv
+          for t in expenses claim_lines reconciliation_links reconciliation_rejections jetfly_transfers account_snapshots; do
+            curl -s -X POST "https://api.supabase.com/v1/projects/$ref/database/query" \
+              -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" -H "Content-Type: application/json" \
+              -d "$(jq -n --arg q "select coalesce(json_agg(t), '[]'::json) as j from public.$t t" '{query: $q}')" \
+              | jq '.[0].j' > /tmp/adv/$t.json
+          done
+          node --experimental-strip-types --no-warnings tests/diagnose/advance-stats.ts /tmp/adv
+          rm -rf /tmp/adv
+
