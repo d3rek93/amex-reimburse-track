@@ -1,5 +1,3 @@
-import { supabase } from "@/integrations/supabase/client";
-
 export const TARGET_ADVANCE = 1500;
 const ACCOUNT_SOURCES = ["AMEX", "Boursobank", "Prélèvement"];
 
@@ -102,25 +100,4 @@ export function computeAdvancePosition(
     position,
     toTopUp: target - position,
   };
-}
-
-export async function loadAdvancePosition(): Promise<AdvancePosition> {
-  const [snap, exp] = await Promise.all([
-    supabase
-      .from("account_snapshots")
-      .select("snapshot_date, balance_eur, pending_card_eur, amex_last_debit_date")
-      .order("snapshot_date", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-    supabase
-      .from("expenses")
-      .select(
-        "id, date, description, amount_eur, reimbursed_amount, reimbursement_status, is_personal, considered_complete, source",
-      )
-      .gte("date", addDays(new Date().toISOString().slice(0, 10), -400))
-      .range(0, 4999),
-  ]);
-  if (snap.error) throw snap.error;
-  if (exp.error) throw exp.error;
-  return computeAdvancePosition(snap.data as AccountSnapshot | null, (exp.data || []) as AdvanceExpense[]);
 }
