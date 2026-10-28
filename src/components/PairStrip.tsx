@@ -16,6 +16,7 @@ export function PairStrip({
   difference,
   tone = "neutral",
   footer,
+  dense = false,
   className,
 }: {
   notes: Claim[];
@@ -23,6 +24,8 @@ export function PairStrip({
   difference: number;
   tone?: "neutral" | "warn" | "todo";
   footer?: ReactNode;
+  /** Tighter footer, for long lists. */
+  dense?: boolean;
   className?: string;
 }) {
   const gap = Math.abs(difference) >= 0.005;
@@ -98,7 +101,9 @@ export function PairStrip({
           )}
         </Side>
       </div>
-      {footer && <div className="border-t px-4 py-2.5 flex flex-wrap items-center gap-2">{footer}</div>}
+      {footer && (
+        <div className={cn("border-t px-4 flex flex-wrap items-center gap-2", dense ? "py-1" : "py-2.5")}>{footer}</div>
+      )}
     </div>
   );
 }

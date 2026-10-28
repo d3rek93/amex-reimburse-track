@@ -77,11 +77,12 @@ function Content({ ledger }: { ledger: Ledger }) {
     );
   }
 
+  const s = (n: number) => (n > 1 ? "s" : "");
   const tasks = [
     { n: counts.toReview, label: "à vérifier", hint: "Propositions et écarts à valider", to: "/reconcile" },
-    { n: counts.missingNotes, label: "notes sans dépense", hint: "Payées par Jetfly, introuvables sur tes relevés", to: "/reconcile?tab=unmatched" },
-    { n: counts.unclaimedExpenses, label: "dépenses sans note", hint: "Pas encore déclarées, ou perso", to: "/reconcile?tab=unmatched" },
-    { n: counts.batchesWithoutTransfer, label: "paiements Jetfly sans virement", hint: "Annoncés dans un relevé, pas vus sur Boursobank", to: "/notes" },
+    { n: counts.missingNotes, label: `note${s(counts.missingNotes)} sans dépense`, hint: "Payées par Jetfly, introuvables sur tes relevés", to: "/reconcile?tab=unmatched" },
+    { n: counts.unclaimedExpenses, label: `dépense${s(counts.unclaimedExpenses)} sans note`, hint: "Pas encore déclarées, ou perso", to: "/reconcile?tab=unmatched" },
+    { n: counts.batchesWithoutTransfer, label: `paiement${s(counts.batchesWithoutTransfer)} Jetfly sans virement`, hint: "Annoncés dans un relevé, pas vus sur Boursobank", to: "/notes" },
   ];
 
   return (

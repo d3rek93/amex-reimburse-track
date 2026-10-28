@@ -92,6 +92,8 @@ export default function ExpensesPage() {
             <div className="flex items-center gap-2 text-sm">
               <Label htmlFor="from" className="font-normal text-muted-foreground">Du</Label>
               <Input id="from" type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-40" />
+            </div>
+            <div className="flex items-center gap-2 text-sm">
               <Label htmlFor="to" className="font-normal text-muted-foreground">au</Label>
               <Input id="to" type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-40" />
             </div>
@@ -104,7 +106,34 @@ export default function ExpensesPage() {
           {rows.length === 0 ? (
             <p className="text-muted-foreground">Aucune dépense ne correspond à ces filtres.</p>
           ) : (
-            <div className="rounded-lg border bg-card overflow-x-auto">
+            <>
+            <ul className="md:hidden rounded-lg border bg-card divide-y">
+              {rows.slice(0, limit).map((e) => {
+                const st = ledger.expenseStatus.get(e.id)!;
+                const match = ledger.matchOfExpense.get(e.id);
+                return (
+                  <li key={e.id} className="px-4 py-2.5 text-sm space-y-1">
+                    <div className="flex items-baseline gap-3">
+                      <span className="flex-1 min-w-0 truncate">{e.description}</span>
+                      <span className="tabular-nums font-medium">{eur(e.amount_eur)}</span>
+                    </div>
+                    <div className="flex items-center gap-3 text-muted-foreground">
+                      <span className="tabular-nums">{dayDate(e.date)}</span>
+                      <span>{e.source ?? "AMEX"}</span>
+                      {match && <span className="tabular-nums">note {match.noteIds.join(", ")}</span>}
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <ExpenseStatusLabel status={st} />
+                      <label className="flex items-center gap-2 text-muted-foreground">
+                        Perso
+                        <Switch checked={e.is_personal} onCheckedChange={(v) => void togglePersonal(e.id, v)} />
+                      </label>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+            <div className="hidden md:block rounded-lg border bg-card overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="text-muted-foreground border-b">
                   <tr>
@@ -160,6 +189,7 @@ export default function ExpensesPage() {
                 </tbody>
               </table>
             </div>
+            </>
           )}
           {rows.length > limit && (
             <Button variant="outline" onClick={() => setLimit((l) => l + PAGE)}>

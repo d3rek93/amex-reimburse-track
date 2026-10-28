@@ -28,7 +28,7 @@ export default function Reconcile() {
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
       ) : (
         <Tabs value={tab} onValueChange={(v) => setParams(v === "review" ? {} : { tab: v }, { replace: true })}>
-          <TabsList className="mb-6">
+          <TabsList className="mb-6 h-auto flex-wrap justify-start">
             <TabsTrigger value="review">À vérifier ({ledger.counts.toReview})</TabsTrigger>
             <TabsTrigger value="unmatched">
               Sans correspondance ({ledger.counts.missingNotes + ledger.counts.unclaimedExpenses})
@@ -531,12 +531,13 @@ function Matched({ ledger }: { ledger: Ledger }) {
           notes={claimsOf(ledger, m.noteIds)}
           expenses={expensesOf(ledger, m.lineIds)}
           difference={m.difference}
+          dense
           footer={
             <>
-              <span className="text-sm text-muted-foreground mr-auto">
-                {m.auto ? `Associée automatiquement : ${m.reason.toLowerCase()}` : "Validée par toi"}
+              <span className="text-xs text-muted-foreground mr-auto" title={m.reason}>
+                {m.auto ? "Automatique" : Math.abs(m.difference) >= 0.005 ? "Validée par toi, écart accepté" : "Validée par toi"}
               </span>
-              <Button size="sm" variant="ghost" disabled={busy !== null} onClick={() => run(m.linkId ?? m.lineIds.join(","), () => actions.unlink(m), "Dissociées")}>
+              <Button size="sm" variant="ghost" className="h-7" disabled={busy !== null} onClick={() => run(m.linkId ?? m.lineIds.join(","), () => actions.unlink(m), "Dissociées")}>
                 Dissocier
               </Button>
             </>
