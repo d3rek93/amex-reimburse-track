@@ -79,7 +79,7 @@ export function PickExpenses({
     );
   const purchases = rank(searched.filter((e) => e.amount_eur > 0)).slice(0, 40);
   // Credit notes: shown apart, near the note's date unless searched for.
-  const credits = rank(searched.filter((e) => e.amount_eur < 0 && (q !== "" || days(e.date, date) <= 120))).slice(0, 20);
+  const credits = rank(searched.filter((e) => e.amount_eur < 0 && (q !== "" || days(e.date, date) <= 120))).slice(0, 10);
   const total = already + [...selected].reduce((s, id) => s + (ledger.expenseById.get(id)?.amount_eur ?? 0), 0);
   const difference = Math.round((total - target) * 100) / 100;
 
@@ -104,7 +104,7 @@ export function PickExpenses({
         </div>
         <p className="text-xs text-muted-foreground">
           {!extend
-            ? "Dépenses encore libres, de la plus proche en montant à la plus éloignée. Les avoirs sont listés à part."
+            ? "Avoirs autour de la date de la note, puis dépenses libres, de la plus proche en montant à la plus éloignée."
             : gap < 0
               ? `L'association dépasse la note de ${eur(-gap)} : un avoir de ce montant comblerait l'écart.`
               : `Il manque ${eur(gap)} pour atteindre le montant de la note.`}
@@ -113,10 +113,8 @@ export function PickExpenses({
           {purchases.length === 0 && credits.length === 0 ? (
             <p className="px-4 py-3 text-sm text-muted-foreground">Aucune dépense libre ne correspond.</p>
           ) : (
-            (gap < 0
-              ? ([["credits", credits], ["purchases", purchases]] as const)
-              : ([["purchases", purchases], ["credits", credits]] as const)
-            ).flatMap(([kind, list]) => [
+            // Credit notes first: there are only a few around the note's date.
+            ([["credits", credits], ["purchases", purchases]] as const).flatMap(([kind, list]) => [
               list.length > 0 ? (
                 <p key={`h-${kind}`} className="px-4 py-1.5 text-xs font-medium text-muted-foreground bg-muted/40">
                   {kind === "credits" ? "Avoirs et crédits" : "Dépenses"}
