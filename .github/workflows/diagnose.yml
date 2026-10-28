@@ -1,0 +1,30 @@
+name: Diagnose data
+
+# Read-only health checks on the production database. Prints counts only —
+# never amounts, labels or other personal data.
+on:
+  workflow_dispatch:
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Counts
+        run: |
+          ref=$(sed -n 's/^project_id = "\(.*\)"/\1/p' supabase/config.toml)
+          q() {
+            curl -s -X POST "https://api.supabase.com/v1/projects/$ref/database/query" \
+              -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" -H "Content-Type: application/json" \
+              -d "$(jq -n --arg q "$1" '{query: $q}')"
+          }
+          note() { echo "::notice::$1: $(q "$2" | jq -c '.')"; }
+          note "bank sessions per bank" "select aspsp_name, count(*) as sessions, sum(jsonb_array_length(accounts)) as accounts from bank_sessions group by 1"
+          note "expenses per source and origin" "select source, split_part(coalesce(bank_transaction_id,'none'), ':', 1) ~ '^(file|manual|none)$' as from_file, count(*) from expenses group by 1, 2 order by 1, 2"
+          note "duplicate expense groups (same date, amount, label)" "select count(*) as groups, coalesce(sum(n - 1), 0) as extra_rows from (select count(*) as n from expenses group by user_id, date, amount_eur, description having count(*) > 1) d"
+          note "duplicates across bank accounts uid" "select count(*) as groups from (select count(distinct split_part(bank_transaction_id, ':', 1)) as accounts from expenses where bank_transaction_id not like 'file:%' and bank_transaction_id not like 'manual:%' group by user_id, date, amount_eur, description having count(distinct split_part(bank_transaction_id, ':', 1)) > 1) d"
+          note "rejections" "select count(*) from reconciliation_rejections"
+          note "links" "select count(*) from reconciliation_links"
+          note "claim lines / batches / transfers" "select (select count(*) from claim_lines) as lines, (select count(*) from claim_batches) as batches, (select count(*) from jetfly_transfers) as transfers"
