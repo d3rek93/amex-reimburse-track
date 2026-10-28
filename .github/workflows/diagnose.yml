@@ -49,3 +49,15 @@ jobs:
           rm -rf /tmp/data
 # rerun 1793188351
 # rerun 1793189067
+      - name: Bank-sync vs file duplicates
+        run: |
+          ref=$(sed -n 's/^project_id = "\(.*\)"/\1/p' supabase/config.toml)
+          q() {
+            curl -s -X POST "https://api.supabase.com/v1/projects/$ref/database/query" \
+              -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" -H "Content-Type: application/json" \
+              -d "$(jq -n --arg q "$1" '{query: $q}')"
+          }
+          note() { echo "::notice::$1: $(q "$2" | jq -c '.')"; }
+          note "bank-sync lines with a file twin (same source, amount, ±3 days)" "select b.source, count(distinct b.id) as bank_lines_with_twin, count(distinct f.id) as file_twins from expenses b join expenses f on f.user_id = b.user_id and f.source = b.source and f.amount_eur = b.amount_eur and abs(f.date - b.date) <= 3 and f.bank_transaction_id like 'file:%' where b.bank_transaction_id not like 'file:%' and b.bank_transaction_id not like 'manual:%' group by b.source"
+          note "of which same first 6 letters of merchant" "select count(*) from expenses b join expenses f on f.user_id = b.user_id and f.source = b.source and f.amount_eur = b.amount_eur and abs(f.date - b.date) <= 3 and f.bank_transaction_id like 'file:%' where b.bank_transaction_id not like 'file:%' and b.bank_transaction_id not like 'manual:%' and left(regexp_replace(upper(b.description), '[^A-Z]', '', 'g'), 6) = left(regexp_replace(upper(f.description), '[^A-Z]', '', 'g'), 6)"
+          note "date range bank-sync / files" "select source, split_part(bank_transaction_id, ':', 1) = 'file' as from_file, min(to_char(date, 'YYYY-MM')), max(to_char(date, 'YYYY-MM')) from expenses group by 1, 2 order by 1, 2"
