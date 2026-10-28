@@ -63,7 +63,7 @@ for (const [device, viewport] of [["desktop", { width: 1280, height: 900 }], ["m
       }
     }
     if (name === "notes") {
-      const first = page.locator("button[aria-expanded]").first();
+      const first = page.locator("main button[aria-expanded]").first();
       if (await first.count()) await first.click();
     }
     await page.screenshot({ path: `${out}/${device}-${name}.png`, fullPage: true });
