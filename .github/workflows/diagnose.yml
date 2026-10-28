@@ -63,3 +63,4 @@ jobs:
           note "date range bank-sync / files" "select source, split_part(bank_transaction_id, ':', 1) = 'file' as from_file, min(to_char(date, 'YYYY-MM')), max(to_char(date, 'YYYY-MM')) from expenses group by 1, 2 order by 1, 2"
 # rerun 1793194851
 # rerun 1793196749
+# rerun 1793201022

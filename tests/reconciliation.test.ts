@@ -301,3 +301,41 @@ test("a negative note under another number cancels the duplicate it voids", () =
   assert.deepEqual(r.unmatchedNoteIds, []);
   assert.deepEqual(r.suggestions, []);
 });
+
+test("money received: through the statement, then by the transfer alone", async () => {
+  const { allocateTransfers } = await import("../src/lib/reconciliation.ts");
+  const hotel = bank("2026-09-02", 215, "3CPAYMENT*NOVOTELKIRCHB LUXEMBOURG");
+  const lunch = bank("2026-10-20", 31.27, "CARTE 20/10/26 INTERMARCHE", "Boursobank");
+  const taxi = bank("2026-10-21", 40, "TAXI G7 EMV2 CLICHY");
+  const dinner = bank("2026-10-21", 60, "RESTAURANT LE PORT");
+  const lines = [hotel, lunch, taxi, dinner];
+  const transfers = [
+    { id: "T-sept", date: "2026-09-03", amount: 215 },
+    { id: "T-lunch", date: "2026-10-22", amount: 31.27 },
+    { id: "T-two", date: "2026-10-23", amount: 100 },
+  ];
+  const r = reconcile({
+    lines,
+    claimLines: [note("591031", "2026-09-02", "Hotel", "Night", 215, "MOS 20260902 1453", "2026-09-02")],
+    transfers,
+  });
+  const a = allocateTransfers(r, lines, transfers);
+  assert.deepEqual(a.byLine.get(hotel.id), { transferId: "T-sept", date: "2026-09-03", via: "statement" });
+  assert.deepEqual(a.byLine.get(lunch.id), { transferId: "T-lunch", date: "2026-10-22", via: "bank" });
+  assert.equal(a.byLine.get(taxi.id)?.transferId, "T-two", "40 + 60 is the only way to make 100");
+  assert.equal(a.byLine.get(dinner.id)?.transferId, "T-two");
+  assert.deepEqual(a.unallocated, []);
+});
+
+test("a transfer with several possible combinations is left to the statement", async () => {
+  const { allocateTransfers } = await import("../src/lib/reconciliation.ts");
+  const lines = [
+    bank("2026-10-20", 30, "TAXI A"),
+    bank("2026-10-20", 30, "TAXI B"),
+  ];
+  const transfers = [{ id: "T", date: "2026-10-22", amount: 30 }];
+  const r = reconcile({ lines, claimLines: [], transfers });
+  const a = allocateTransfers(r, lines, transfers);
+  assert.equal(a.byLine.size, 0);
+  assert.deepEqual(a.unallocated, ["T"]);
+});

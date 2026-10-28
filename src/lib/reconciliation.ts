@@ -697,3 +697,123 @@ export function reconcile(input: ReconcileInput, options: ReconcileOptions = {})
     unmatchedTransferIds: [...freeTransfers].sort(),
   };
 }
+
+// ------------------------------------------------- money received (transfers)
+
+/** How a bank line was paid back by Jetfly. */
+export interface Reimbursement {
+  /** The Jetfly transfer on Boursobank, when known. */
+  transferId: string | null;
+  /** Transfer date, or the payment date of the statement when the transfer is not on file. */
+  date: string;
+  /** "statement": through its note in a Jetfly statement; "bank": the transfer alone. */
+  via: "statement" | "bank";
+}
+
+export interface TransferAllocation {
+  byLine: Map<string, Reimbursement>;
+  /** Transfers explained by bank lines alone (no statement yet), one combination only. */
+  bankAllocated: { transferId: string; lineIds: string[] }[];
+  /** Transfers no statement explains and no single combination of lines adds up to. */
+  unallocated: string[];
+}
+
+/**
+ * Which bank lines each Jetfly transfer paid back. First through the
+ * statements (transfer ↔ payment batch ↔ notes ↔ matched lines), then, for
+ * transfers no statement covers yet, by finding the one combination of
+ * waiting lines from the previous weeks that adds up to the amount.
+ */
+export function allocateTransfers(
+  result: ReconcileResult,
+  lines: BankLine[],
+  transfers: Transfer[],
+  options: { ignoredTransferIds?: string[]; lookbackDays?: number; maxLines?: number } = {},
+): TransferAllocation {
+  const lookback = options.lookbackDays ?? 30;
+  const maxLines = options.maxLines ?? 6;
+  const ignored = new Set(options.ignoredTransferIds ?? []);
+  const transferById = new Map(transfers.map((t) => [t.id, t]));
+  const byLine = new Map<string, Reimbursement>();
+
+  // 1. Through the statements.
+  const payingBatch = new Map<string, BatchStatus>();
+  const batchByRef = new Map(result.batches.map((b) => [b.ref, b]));
+  for (const c of result.claims) {
+    const first = c.lines
+      .filter((l) => l.amount > 0)
+      .sort((a, b) => a.paymentDate.localeCompare(b.paymentDate))[0];
+    const batch = first && batchByRef.get(first.batchRef);
+    if (batch) payingBatch.set(c.noteId, batch);
+  }
+  for (const m of result.matches) {
+    for (const n of m.noteIds) {
+      const batch = payingBatch.get(n);
+      if (!batch) continue;
+      const transfer = batch.transferId ? transferById.get(batch.transferId) : undefined;
+      for (const id of m.lineIds) {
+        if (byLine.has(id)) continue;
+        byLine.set(id, { transferId: transfer?.id ?? null, date: transfer?.date ?? batch.paymentDate, via: "statement" });
+      }
+    }
+  }
+
+  // 2. Transfers no statement explains yet.
+  const usedByBatches = new Set(result.batches.map((b) => b.transferId).filter(Boolean) as string[]);
+  const inMatch = new Set(result.matches.flatMap((m) => m.lineIds));
+  const neutralized = new Set(result.neutralized.flat());
+  const bankAllocated: TransferAllocation["bankAllocated"] = [];
+  const unallocated: string[] = [];
+  const toCents = (n: number) => Math.round(n * 100);
+
+  for (const t of transfers.slice().sort((a, b) => a.date.localeCompare(b.date))) {
+    if (usedByBatches.has(t.id) || ignored.has(t.id)) continue;
+    const candidates = lines
+      .filter(
+        (l) =>
+          l.amount > 0 &&
+          !l.personal &&
+          !byLine.has(l.id) &&
+          !inMatch.has(l.id) &&
+          !neutralized.has(l.id) &&
+          dayNumber(t.date) - dayNumber(l.date) >= 0 &&
+          dayNumber(t.date) - dayNumber(l.date) <= lookback &&
+          toCents(l.amount) <= toCents(t.amount),
+      )
+      .sort((a, b) => b.date.localeCompare(a.date) || b.amount - a.amount)
+      .slice(0, 18)
+      .sort((a, b) => b.amount - a.amount);
+
+    // Depth-first search for subsets adding up to the transfer; stop at two.
+    const target = toCents(t.amount);
+    const amounts = candidates.map((l) => toCents(l.amount));
+    const suffix = amounts.map((_, i) => amounts.slice(i).reduce((s, a) => s + a, 0));
+    const found: number[][] = [];
+    const pick: number[] = [];
+    const walk = (i: number, left: number) => {
+      if (found.length > 1) return;
+      if (left === 0) {
+        found.push(pick.slice());
+        return;
+      }
+      if (i >= amounts.length || pick.length >= maxLines || suffix[i] < left) return;
+      if (amounts[i] <= left) {
+        pick.push(i);
+        walk(i + 1, left - amounts[i]);
+        pick.pop();
+      }
+      walk(i + 1, left);
+    };
+    walk(0, target);
+
+    if (found.length === 1) {
+      const ids = found[0].map((i) => candidates[i].id);
+      ids.forEach((id) => byLine.set(id, { transferId: t.id, date: t.date, via: "bank" }));
+      bankAllocated.push({ transferId: t.id, lineIds: ids });
+    } else {
+      unallocated.push(t.id);
+    }
+  }
+
+  return { byLine, bankAllocated, unallocated };
+}

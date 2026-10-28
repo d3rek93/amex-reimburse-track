@@ -1,7 +1,7 @@
 // Runs the engine on exported tables and prints statistics only (no amounts, no labels).
 // Usage: node --experimental-strip-types tests/diagnose/engine-stats.ts <dir with *.json>
 import { readFileSync } from "node:fs";
-import { reconcile, labelKind } from "../../src/lib/reconciliation.ts";
+import { reconcile, labelKind, allocateTransfers } from "../../src/lib/reconciliation.ts";
 
 const dir = process.argv[2];
 const load = (t: string) => JSON.parse(readFileSync(`${dir}/${t}.json`, "utf8")) as Record<string, unknown>[];
@@ -66,3 +66,14 @@ out(
   }),
 );
 out("transfers without payment", r.unmatchedTransferIds.length);
+
+const bankLines = expenses.map((e) => ({
+  id: String(e.id), date: String(e.date), amount: Number(e.amount_eur), label: String(e.description),
+  source: String(e.source ?? "AMEX"), personal: Boolean(e.is_personal),
+}));
+const tr = transfers.map((t) => ({ id: String(t.id), date: String(t.date), amount: Number(t.amount_eur) }));
+const alloc = allocateTransfers(r, bankLines, tr);
+const lastStatement = r.batches.map((b) => b.paymentDate).sort().pop() ?? "";
+const via = [...alloc.byLine.values()].reduce<Record<string, number>>((a, x) => ((a[x.via] = (a[x.via] ?? 0) + 1), a), {});
+const unalloc = alloc.unallocated.map((id) => tr.find((t) => t.id === id)!);
+console.log(`::notice::ALLOC lines reimbursed by way: ${JSON.stringify(via)}; bank transfers explained: ${alloc.bankAllocated.length}; unallocated: ${unalloc.length} (inside last statement ${lastStatement.slice(0, 7)}: ${unalloc.filter((t) => t.date <= lastStatement).length}, after: ${unalloc.filter((t) => t.date > lastStatement).length}); unallocated by month: ${JSON.stringify(unalloc.reduce<Record<string, number>>((a, t) => ((a[t.date.slice(0, 7)] = (a[t.date.slice(0, 7)] ?? 0) + 1), a), {}))}`);
