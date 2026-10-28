@@ -71,7 +71,7 @@ jobs:
               -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" -H "Content-Type: application/json" \
               -d "$(jq -n --arg q "$1" '{query: $q}')"
           }
-          echo "::notice::claim lines ±330.60: $(q "select note_id, line_date, category, subcategory, amount_eur, batch_ref, payment_date from claim_lines where abs(amount_eur) = 330.60 order by payment_date" | jq -c '.')"
-          echo "::notice::batches containing them: $(q "select b.ref, b.payment_date, b.declared_total, (select sum(amount_eur) from claim_lines l where l.batch_ref = b.ref) as lines_total from claim_batches b where b.ref in (select batch_ref from claim_lines where abs(amount_eur) = 330.60)" | jq -c '.')"
-          echo "::notice::expenses 330.60: $(q "select date, source, left(description, 40) as label, amount_eur from expenses where abs(amount_eur) = 330.60" | jq -c '.')"
-          echo "::notice::links with these notes: $(q "select note_ids, array_length(expense_ids, 1) as n_expenses, difference, comment from reconciliation_links where note_ids && (select array_agg(note_id) from claim_lines where abs(amount_eur) = 330.60)" | jq -c '.')"
+          echo "::notice::batch MOS 20260302 1352: $(q "select note_id, line_date, category, subcategory, amount_eur from claim_lines where batch_ref = 'MOS 20260302 1352' order by note_id" | jq -c '.')"
+          echo "::notice::notes 540864/543252 all lines: $(q "select note_id, amount_eur, batch_ref from claim_lines where note_id in ('540864','543252')" | jq -c '.')"
+          echo "::notice::notes dated 2026-02-19..21: $(q "select note_id, line_date, category, subcategory, amount_eur, batch_ref from claim_lines where line_date between '2026-02-19' and '2026-02-21' order by line_date, note_id" | jq -c '.')"
+          echo "::notice::expenses 2026-02-18..23 over 100: $(q "select date, source, left(description, 40) as label, amount_eur from expenses where date between '2026-02-18' and '2026-02-23' and abs(amount_eur) >= 100 order by date" | jq -c '.')"
