@@ -101,6 +101,9 @@ function Review({ ledger }: { ledger: Ledger }) {
   }, [s]);
   const personal = expensesOf(ledger, ledger.personalSuggestions);
   const noNote = ledger.expenses.filter((e) => ledger.expenseStatus.get(e.id) === "no_note");
+  const credits = ledger.expenses
+    .filter((e) => ledger.expenseStatus.get(e.id) === "refund")
+    .sort((a, b) => b.date.localeCompare(a.date));
   const absent = ledger.transferViews.filter((t) => t.status === "absent" && t.lineIds.length === 0);
   const toSplit = ledger.transferViews.filter((t) => t.status === "to_split");
   const transferOf = (expenseId: string) => {
@@ -108,7 +111,7 @@ function Review({ ledger }: { ledger: Ledger }) {
     return r?.transferId ? ledger.transferViews.find((t) => t.id === r.transferId) : undefined;
   };
 
-  if (s.length === 0 && personal.length === 0 && noNote.length === 0 && absent.length === 0 && toSplit.length === 0) {
+  if (s.length === 0 && personal.length === 0 && credits.length === 0 && noNote.length === 0 && absent.length === 0 && toSplit.length === 0) {
     return (
       <p className="text-muted-foreground max-w-xl">
         Rien à vérifier. Les notes et dépenses restantes n'ont aucun candidat : retrouve-les dans « Sans correspondance ».
@@ -147,6 +150,29 @@ function Review({ ledger }: { ledger: Ledger }) {
           <p className="text-sm text-muted-foreground">
             Retrouve la note correspondante dans « Sans correspondance », ou vérifie auprès du service notes de frais.
           </p>
+        </Section>
+      )}
+
+      {credits.length > 0 && (
+        <Section
+          title="Crédits à classer"
+          hint="Crédits sans achat du même montant à annuler. Offre AMEX ou crédit de bienvenue : l'argent est à toi. Avoir sur une dépense pro : ajoute-le à l'association de sa note (fiche de la note, « Ajouter une dépense »)."
+        >
+          <div className="rounded-lg border bg-card divide-y">
+            {credits.map((e) => (
+              <div key={e.id} className="flex flex-wrap items-center gap-3 px-4 py-2.5 text-sm">
+                <span className="w-14 shrink-0 text-muted-foreground tabular-nums">{shortDate(e.date)}</span>
+                <span className="flex-1 min-w-[12rem] truncate">
+                  {e.description.replace(/^Remboursement - /, "")}
+                  <span className="text-muted-foreground"> · {e.source}</span>
+                </span>
+                <span className="tabular-nums font-medium">{eur(e.amount_eur)}</span>
+                <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => run(e.id, () => base.setPersonal([e.id], true), "Classé en offre AMEX")}>
+                  Offre AMEX, à moi
+                </Button>
+              </div>
+            ))}
+          </div>
         </Section>
       )}
 

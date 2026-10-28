@@ -75,6 +75,8 @@ export interface BatchView {
  */
 export type ExpenseStatus =
   | "personal"
+  /** A credit that belongs to the user (AMEX offer, welcome credit…), not to Jetfly. */
+  | "gain"
   | "validated"
   | "discrepancy"
   | "reimbursed"
@@ -127,6 +129,8 @@ export interface Ledger {
   advance: AdvancePosition;
   lastSyncedAt: string | null;
   counts: {
+    /** AMEX credits with no purchase to cancel: offer or credit note, to classify. */
+    looseCredits: number;
     /** Paid back by a transfer, yet absent from statements already in. */
     noNote: number;
     /** Transfers inside the statements' period that no statement explains. */
@@ -304,7 +308,7 @@ export function buildLedger(raw: RawData): Ledger {
     const m = matchOfExpense.get(e.id);
     const paid = allocation.byLine.get(e.id);
     let status: ExpenseStatus;
-    if (e.is_personal) status = "personal";
+    if (e.is_personal) status = e.amount_eur < 0 ? "gain" : "personal";
     else if (m) status = Math.abs(m.difference) >= 0.005 ? "discrepancy" : "validated";
     else if (neutralized.has(e.id)) status = "neutralized";
     else if (paid && paid.transferId && absentTransfers.has(paid.transferId)) status = "no_note";
@@ -409,13 +413,14 @@ export function buildLedger(raw: RawData): Ledger {
     advance,
     lastSyncedAt: raw.lastSyncedAt,
     counts: {
+      looseCredits: [...expenseStatus.values()].filter((s) => s === "refund").length,
       noNote: [...expenseStatus.values()].filter((s) => s === "no_note").length,
       absentTransfers: absentTransfers.size,
       toSplit: transferViews.filter((t) => t.status === "to_split").length,
       toReview:
         reviewGroups.size +
         personalSuggestions.length +
-        [...expenseStatus.values()].filter((s) => s === "no_note").length +
+        [...expenseStatus.values()].filter((s) => s === "no_note" || s === "refund").length +
         transferViews.filter((t) => t.status === "absent" && t.lineIds.length === 0).length,
       discrepancies: result.suggestions.filter(isDiscrepancy).length,
       missingNotes: missingNoteIds.length,

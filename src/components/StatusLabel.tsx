@@ -21,8 +21,9 @@ const EXPENSE: Record<ExpenseStatus, [string, Tone]> = {
   to_review: ["À vérifier", "todo"],
   pending: ["En attente de remboursement", "wait"],
   personal: ["Perso", "off"],
+  gain: ["Offre AMEX, à moi", "off"],
   neutralized: ["Annulée par un avoir", "off"],
-  refund: ["Avoir", "off"],
+  refund: ["Crédit à classer", "todo"],
 };
 
 /** Has the money come back? */
@@ -34,6 +35,7 @@ const REFUND: Record<ExpenseStatus, [string, Tone] | null> = {
   to_review: ["En attente", "wait"],
   pending: ["En attente", "wait"],
   personal: null,
+  gain: null,
   neutralized: null,
   refund: null,
 };
@@ -47,6 +49,7 @@ const VALIDATION: Record<ExpenseStatus, [string, Tone] | null> = {
   to_review: ["À vérifier", "todo"],
   pending: ["Pas encore de note", "wait"],
   personal: null,
+  gain: null,
   neutralized: null,
   refund: null,
 };

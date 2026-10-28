@@ -7,6 +7,9 @@ import { cn } from "@/lib/utils";
 const AdvanceDetails = () => {
   const { ledger, isLoading } = useLedger();
   const pos = ledger?.advance;
+  const gains = ledger
+    ? -ledger.expenses.filter((e) => ledger.expenseStatus.get(e.id) === "gain").reduce((s, e) => s + e.amount_eur, 0)
+    : 0;
 
   return (
     <AppLayout title="Avance Jetfly">
@@ -55,7 +58,15 @@ const AdvanceDetails = () => {
               </tbody>
             </table>
             <p className="text-sm text-muted-foreground mt-3">
-              Les dépenses perso et les écarts acceptés sont déjà dans le solde du compte : rien à saisir à part.
+              Les dépenses perso, les écarts acceptés et les offres AMEX sont déjà dans le solde du compte : rien à saisir à
+              part.
+              {gains > 0.005 && (
+                <>
+                  {" "}
+                  Tes offres AMEX ({eur(gains)} au total) réduisent tes prélèvements AMEX : cet argent est à toi et fait
+                  partie de ce que tu peux récupérer.
+                </>
+              )}
             </p>
           </section>
 

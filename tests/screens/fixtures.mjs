@@ -80,6 +80,7 @@ export const jetfly_transfers = claim_batches
   .map((b, i) => ({ id: `20000000-0000-4000-8000-${String(i).padStart(12, "0")}`, date: b.payment_date, amount_eur: b.declared_total, label: "VIR SEPA JETFLY AVIATION S.A.", ignored: false }));
 
 expenses.push(
+  exp("2026-09-18", "Remboursement - MARRIOTT HOTEL", -30),
   exp("2025-11-14", "HOTEL NOVOTEL LYON", 142.5),
   exp("2025-12-03", "SNCF-VOYAGEURS PARIS", 88),
 );
