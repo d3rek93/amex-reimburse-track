@@ -67,13 +67,7 @@ const AdvanceDetails = () => {
                 <tr>
                   <td colSpan={2} className="pt-4" />
                 </tr>
-                <Step
-                  label="Disponible aujourd'hui + ce que Jetfly te doit encore"
-                  hint={`${eur(pos.bankBalance - pos.amexUnpaid - pos.cardUnpaid)} + ${eur(pos.stillOwed)}`}
-                  value={pos.position}
-                  first
-                />
-                <Subtotal label="Quand Jetfly sera à jour" value={pos.position} />
+                <Subtotal label="Quand Jetfly sera à jour (disponible + ce qu'il te doit)" value={pos.position} />
                 <Step label="Avance confiée par Jetfly" hint="À garder sur le compte" value={-pos.target} />
                 <Subtotal label={pos.toTopUp > 0 ? "Manque" : "À toi"} value={-pos.toTopUp} strong />
               </tbody>
