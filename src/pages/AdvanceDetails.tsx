@@ -1,117 +1,85 @@
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
-import { Navigation } from "@/components/Navigation";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, Wallet, Info } from "lucide-react";
-import { format } from "date-fns";
-import { fr } from "date-fns/locale";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { AdvancePosition, loadAdvancePosition } from "@/lib/advance";
-import { eur } from "@/components/AdvanceSummaryCard";
-
-const fmt = (d: string) => format(new Date(d), "d MMM yyyy", { locale: fr });
+import { Loader2 } from "lucide-react";
+import { AppLayout } from "@/components/AppLayout";
+import { useLedger } from "@/lib/ledger";
+import { eur, longDate, shortDate } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 const AdvanceDetails = () => {
-  const navigate = useNavigate();
-  const [pos, setPos] = useState<AdvancePosition | null>(null);
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      if (!data.session) navigate("/auth");
-      else loadAdvancePosition().then(setPos).catch(console.error);
-    });
-  }, [navigate]);
-
-  if (!pos) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  const ok = pos.toTopUp <= 0;
-  const rows = [
-    { label: "Solde réel du compte pro", hint: pos.snapshot ? `Relevé Boursobank du ${fmt(pos.snapshot.snapshot_date)}` : "Aucun relevé importé", value: pos.bankBalance },
-    { label: "Ce que Jetfly te doit", hint: `${pos.owedExpenses.length} dépense(s) pro pas encore remboursée(s)`, value: pos.owedByJetfly },
-    { label: "Dépenses AMEX pas encore prélevées", hint: pos.amexUnpaidSince ? `Depuis le ${fmt(pos.amexUnpaidSince)}` : "Date du dernier prélèvement AMEX inconnue", value: -pos.amexUnpaid },
-    { label: "Achats carte Boursobank pas encore débités", hint: "Débit différé de fin de mois", value: -pos.cardUnpaid },
-  ];
+  const { ledger, isLoading } = useLedger();
+  const pos = ledger?.advance;
 
   return (
-    <div className="min-h-screen bg-background">
-      <Navigation onUpload={() => navigate("/expenses?openUpload=true")} />
-      <div className="container mx-auto py-8 px-4 max-w-4xl space-y-6">
-        <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
-          <Wallet className="h-8 w-8" /> Avance Jetfly
-        </h1>
-
-        <Card>
-          <CardContent className="p-8 text-center space-y-2">
-            <p className="text-sm text-muted-foreground">Avance confiée par Jetfly : {eur(pos.target)}</p>
-            <p className={`text-4xl font-bold ${ok ? "text-success" : "text-destructive"}`}>
-              {ok ? `Tu peux récupérer ${eur(-pos.toTopUp)}` : `À remettre de ta poche : ${eur(pos.toTopUp)}`}
+    <AppLayout title="Avance Jetfly">
+      {isLoading || !pos ? (
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      ) : !pos.snapshot ? (
+        <p className="text-muted-foreground max-w-xl">
+          Le solde du compte Boursobank n'est pas encore connu. Synchronise tes comptes depuis le tableau de bord, ou
+          importe un export CSV Boursobank.
+        </p>
+      ) : (
+        <div className="space-y-8 max-w-3xl">
+          <section className="space-y-1">
+            <p className={cn("text-3xl font-semibold tracking-tight", pos.toTopUp > 0 ? "text-destructive" : "text-success")}>
+              {pos.toTopUp > 0 ? `${eur(pos.toTopUp)} à remettre de ta poche` : `${eur(-pos.toTopUp)} récupérables`}
             </p>
-            <p className="text-muted-foreground">Position actuelle de l'avance : {eur(pos.position)}</p>
-          </CardContent>
-        </Card>
+            <p className="text-muted-foreground">
+              Jetfly t'a confié {eur(pos.target)}. Position actuelle : {eur(pos.position)}.
+            </p>
+          </section>
 
-        <Card>
-          <CardHeader><CardTitle>Comment c'est calculé</CardTitle></CardHeader>
-          <CardContent>
-            <Table>
-              <TableBody>
-                {rows.map((r) => (
-                  <TableRow key={r.label}>
-                    <TableCell>
-                      <p className="font-medium">{r.label}</p>
-                      <p className="text-xs text-muted-foreground">{r.hint}</p>
-                    </TableCell>
-                    <TableCell className="text-right font-semibold whitespace-nowrap">
-                      {r.value >= 0 ? "+ " : "− "}{eur(Math.abs(r.value))}
-                    </TableCell>
-                  </TableRow>
+          <section>
+            <h2 className="text-base font-semibold mb-2">Le calcul</h2>
+            <table className="w-full text-sm">
+              <tbody className="divide-y">
+                {[
+                  { label: "Solde du compte pro", hint: `Au ${longDate(pos.snapshot.snapshot_date)}`, value: pos.bankBalance },
+                  { label: "Ce que Jetfly te doit", hint: `${pos.owedExpenses.length} dépense(s) pro sans note associée`, value: pos.owedByJetfly },
+                  { label: "Dépenses AMEX pas encore prélevées", hint: pos.amexUnpaidSince ? `Depuis le ${longDate(pos.amexUnpaidSince)}` : "Dernier prélèvement AMEX inconnu", value: -pos.amexUnpaid },
+                  { label: "Achats carte Boursobank pas encore débités", hint: "Débit différé de fin de mois", value: -pos.cardUnpaid },
+                ].map((r) => (
+                  <tr key={r.label}>
+                    <td className="py-2.5">
+                      <p>{r.label}</p>
+                      <p className="text-muted-foreground">{r.hint}</p>
+                    </td>
+                    <td className="py-2.5 text-right tabular-nums font-medium whitespace-nowrap">
+                      {r.value >= 0 ? "+" : "−"} {eur(Math.abs(r.value))}
+                    </td>
+                  </tr>
                 ))}
-                <TableRow>
-                  <TableCell className="font-bold">= Position de l'avance</TableCell>
-                  <TableCell className="text-right font-bold">{eur(pos.position)}</TableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
-            <p className="text-xs text-muted-foreground mt-4 flex gap-2">
-              <Info className="h-4 w-4 shrink-0" />
-              Tes dépenses perso, les écarts acceptés et tes virements perso sont déjà inclus dans le solde réel du compte : plus besoin de les saisir.
-              Importe ton dernier relevé Boursobank (et AMEX) pour mettre ce chiffre à jour.
+                <tr>
+                  <td className="py-2.5 font-semibold">Position de l'avance</td>
+                  <td className="py-2.5 text-right tabular-nums font-semibold">{eur(pos.position)}</td>
+                </tr>
+              </tbody>
+            </table>
+            <p className="text-sm text-muted-foreground mt-3">
+              Les dépenses perso et les écarts acceptés sont déjà dans le solde du compte : rien à saisir à part.
             </p>
-          </CardContent>
-        </Card>
+          </section>
 
-        <Card>
-          <CardHeader><CardTitle>Dépenses pro en attente de remboursement ({pos.owedExpenses.length})</CardTitle></CardHeader>
-          <CardContent>
+          <section>
+            <h2 className="text-base font-semibold mb-2">Dépenses pro sans note ({pos.owedExpenses.length})</h2>
             {pos.owedExpenses.length === 0 ? (
-              <p className="text-muted-foreground text-center py-4">Aucune</p>
+              <p className="text-sm text-muted-foreground">Aucune.</p>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow><TableHead>Date</TableHead><TableHead>Libellé</TableHead><TableHead className="text-right">Montant</TableHead></TableRow>
-                </TableHeader>
-                <TableBody>
-                  {[...pos.owedExpenses].sort((a, b) => b.date.localeCompare(a.date)).map((e) => (
-                    <TableRow key={e.id}>
-                      <TableCell className="whitespace-nowrap">{fmt(e.date)}</TableCell>
-                      <TableCell className="max-w-[300px] truncate">{e.description}</TableCell>
-                      <TableCell className="text-right">{eur(e.amount_eur - (e.reimbursed_amount || 0))}</TableCell>
-                    </TableRow>
+              <div className="rounded-lg border bg-card divide-y">
+                {[...pos.owedExpenses]
+                  .sort((a, b) => b.date.localeCompare(a.date))
+                  .map((e) => (
+                    <div key={e.id} className="flex items-baseline gap-3 px-4 py-2 text-sm">
+                      <span className="w-14 shrink-0 text-muted-foreground tabular-nums">{shortDate(e.date)}</span>
+                      <span className="flex-1 min-w-0 truncate">{e.description}</span>
+                      <span className="tabular-nums font-medium">{eur(e.amount_eur)}</span>
+                    </div>
                   ))}
-                </TableBody>
-              </Table>
+              </div>
             )}
-          </CardContent>
-        </Card>
-      </div>
-    </div>
+          </section>
+        </div>
+      )}
+    </AppLayout>
   );
 };
 

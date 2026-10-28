@@ -2,10 +2,11 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import Expenses from "./pages/Expenses";
-import Stats from "./pages/Stats";
-import Reimbursements from "./pages/Reimbursements";
+import { BrowserRouter, Navigate, Routes, Route } from "react-router-dom";
+import Dashboard from "./pages/Dashboard";
+import Reconcile from "./pages/Reconcile";
+import ExpensesPage from "./pages/ExpensesPage";
+import NotesPage from "./pages/NotesPage";
 import AdvanceDetails from "./pages/AdvanceDetails";
 import Auth from "./pages/Auth";
 import Privacy from "./pages/Privacy";
@@ -22,16 +23,17 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Stats />} />
-          <Route path="/stats" element={<Stats />} />
-          <Route path="/expenses" element={<Expenses />} />
-          <Route path="/reimbursements" element={<Reimbursements />} />
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/reconcile" element={<Reconcile />} />
+          <Route path="/expenses" element={<ExpensesPage />} />
+          <Route path="/notes" element={<NotesPage />} />
+          <Route path="/stats" element={<Navigate to="/" replace />} />
+          <Route path="/reimbursements" element={<Navigate to="/notes" replace />} />
           <Route path="/advance" element={<AdvanceDetails />} />
           <Route path="/auth" element={<Auth />} />
           <Route path="/privacy" element={<Privacy />} />
           <Route path="/terms" element={<Terms />} />
           <Route path="/bank-callback" element={<BankCallback />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

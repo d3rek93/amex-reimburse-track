@@ -5,11 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { completeLink, runBankSync } from "@/lib/bankSync";
+import { useQueryClient } from "@tanstack/react-query";
+import { LEDGER_KEY } from "@/lib/ledger";
 
 export default function BankCallback() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [message, setMessage] = useState("Finalisation de la connexion…");
   const [failed, setFailed] = useState(false);
   const started = useRef(false);
@@ -52,12 +55,13 @@ export default function BankCallback() {
               ? ` · solde ${summary.balance.toFixed(2).replace(".", ",")} €`
               : ""),
         });
-        navigate("/advance", { replace: true });
+        await queryClient.invalidateQueries({ queryKey: LEDGER_KEY });
+        navigate("/", { replace: true });
       } catch (err) {
         fail((err as Error).message ?? "La connexion a échoué.");
       }
     })();
-  }, [params, navigate, toast]);
+  }, [params, navigate, toast, queryClient]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-muted/30 px-4">
@@ -66,7 +70,7 @@ export default function BankCallback() {
           <>
             <h1 className="text-lg font-semibold mb-2">Connexion non aboutie</h1>
             <p className="text-sm text-muted-foreground mb-6">{message}</p>
-            <Button onClick={() => navigate("/stats", { replace: true })}>
+            <Button onClick={() => navigate("/", { replace: true })}>
               Revenir à l'application
             </Button>
           </>

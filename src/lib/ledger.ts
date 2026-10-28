@@ -165,18 +165,15 @@ async function loadRaw(): Promise<RawData> {
     supabase.from("bank_sessions").select("last_synced_at").order("last_synced_at", { ascending: false }).limit(1),
   ]);
   if (snap.error) throw new Error(snap.error.message);
-  const num = <T extends Record<string, unknown>>(rows: T[], keys: (keyof T)[]) =>
-    rows.map((r) => {
-      const copy = { ...r };
-      for (const k of keys) if (copy[k] !== null && copy[k] !== undefined) copy[k] = Number(copy[k]) as T[keyof T];
-      return copy;
-    });
+  // Postgres numerics may arrive as strings.
+  const n = (v: unknown) => Number(v);
+  const nOrNull = (v: unknown) => (v === null || v === undefined ? null : Number(v));
   return {
-    expenses: num(expenses, ["amount_eur", "original_amount"]),
-    claimLines: num(claimLines, ["amount_eur"]),
-    batches: num(batches, ["declared_total"]),
-    transfers: num(transfers, ["amount_eur"]),
-    links: num(links, ["difference"]),
+    expenses: expenses.map((e) => ({ ...e, amount_eur: n(e.amount_eur), original_amount: nOrNull(e.original_amount) })),
+    claimLines: claimLines.map((l) => ({ ...l, amount_eur: n(l.amount_eur) })),
+    batches: batches.map((b) => ({ ...b, declared_total: n(b.declared_total) })),
+    transfers: transfers.map((t) => ({ ...t, amount_eur: n(t.amount_eur) })),
+    links: links.map((l) => ({ ...l, difference: n(l.difference) })),
     rejections,
     snapshot: (snap.data as AccountSnapshot | null) ?? null,
     lastSyncedAt: (sessions.data?.[0]?.last_synced_at as string | null) ?? null,

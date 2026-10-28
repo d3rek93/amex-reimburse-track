@@ -49,7 +49,7 @@ export interface ParsedSnapshot {
 
 export const parseAmount = (v: unknown): number => {
   if (typeof v === "number") return v;
-  const s = String(v ?? "").replace(/["\s ]/g, "").replace(",", ".");
+  const s = String(v ?? "").replace(/["\s\u00a0]/g, "").replace(",", ".");
   const n = parseFloat(s);
   return Number.isFinite(n) ? n : NaN;
 };
@@ -95,7 +95,7 @@ export function splitCsvRow(row: string, sep: string): string[] {
 }
 
 const textLines = (text: string) =>
-  text.replace(/^﻿/, "").split(/\r?\n/).filter((l) => l.trim() !== "");
+  text.replace(/^\ufeff/, "").split(/\r?\n/).filter((l) => l.trim() !== "");
 
 /** Adds an occurrence counter so identical lines on the same day stay distinct. */
 function keyed<T extends { fileKey: string }>(rows: T[]): T[] {
