@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Loader2, Search } from "lucide-react";
+import { Check, Loader2, Search } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { PairStrip } from "@/components/PairStrip";
 import { Button } from "@/components/ui/button";
@@ -609,7 +609,16 @@ function PayOtherwise({ open, notes, onClose }: { open: boolean; notes: Claim[];
         <div className="grid gap-3">
           <div className="flex gap-2" role="radiogroup" aria-label="Moyen de paiement">
             {([["card", "Autre carte"], ["cash", "Espèces"]] as const).map(([value, label]) => (
-              <Button key={value} type="button" role="radio" aria-checked={method === value} variant={method === value ? "secondary" : "outline"} onClick={() => setMethod(value)}>
+              <Button
+                key={value}
+                type="button"
+                role="radio"
+                aria-checked={method === value}
+                variant="outline"
+                className={cn(method === value && "border-primary bg-primary/5 text-primary ring-1 ring-primary hover:bg-primary/10 hover:text-primary")}
+                onClick={() => setMethod(value)}
+              >
+                {method === value && <Check className="h-4 w-4 mr-1.5" aria-hidden />}
                 {label}
               </Button>
             ))}
