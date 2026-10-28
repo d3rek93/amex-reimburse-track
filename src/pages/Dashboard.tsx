@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { Link } from "react-router-dom";
 import { Loader2, RefreshCw } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
@@ -139,52 +139,183 @@ function Content({ ledger }: { ledger: Ledger }) {
   );
 }
 
-/** Last three months: what went out for work, and how much of it came back. */
+type Period = "3m" | "12m" | "ytd" | "last_year" | "all";
+
+const PERIODS: [Period, string][] = [
+  ["3m", "3 derniers mois"],
+  ["12m", "12 derniers mois"],
+  ["ytd", "Année en cours"],
+  ["last_year", "Année dernière"],
+  ["all", "Depuis le début"],
+];
+
+const PERIOD_KEY = "dashboard.period";
+
+const readPeriod = (): Period => {
+  try {
+    const v = localStorage.getItem(PERIOD_KEY);
+    return PERIODS.some(([p]) => p === v) ? (v as Period) : "3m";
+  } catch {
+    return "3m";
+  }
+};
+
+/** First and last month (YYYY-MM) of a period, relative to today. */
+function periodRange(period: Period, today = new Date()): [string, string] {
+  const ym = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  const back = (months: number) => ym(new Date(today.getFullYear(), today.getMonth() - months, 1));
+  const year = today.getFullYear();
+  switch (period) {
+    case "3m":
+      return [back(2), ym(today)];
+    case "12m":
+      return [back(11), ym(today)];
+    case "ytd":
+      return [`${year}-01`, ym(today)];
+    case "last_year":
+      return [`${year - 1}-01`, `${year - 1}-12`];
+    case "all":
+      return ["0000-00", "9999-99"];
+  }
+}
+
+interface Totals {
+  spent: number;
+  matched: number;
+  received: number;
+  pending: number;
+  count: number;
+}
+
+const empty = (): Totals => ({ spent: 0, matched: 0, received: 0, pending: 0, count: 0 });
+const add = (a: Totals, b: Totals): Totals => ({
+  spent: a.spent + b.spent,
+  matched: a.matched + b.matched,
+  received: a.received + b.received,
+  pending: a.pending + b.pending,
+  count: a.count + b.count,
+});
+
+/** Pro expenses per month over a chosen period: spent, paid back and validated, paid back only, waiting. */
 function MonthSummary({ ledger }: { ledger: Ledger }) {
-  const months = new Map<string, { spent: number; matched: number; received: number; pending: number }>();
+  const [period, setPeriodState] = useState<Period>(readPeriod);
+  const setPeriod = (p: Period) => {
+    setPeriodState(p);
+    try {
+      localStorage.setItem(PERIOD_KEY, p);
+    } catch {
+      /* preference only */
+    }
+  };
+
+  const months = new Map<string, Totals>();
   for (const e of ledger.expenses) {
     if (e.is_personal || e.amount_eur <= 0) continue;
     const key = e.date.slice(0, 7);
-    const m = months.get(key) ?? { spent: 0, matched: 0, received: 0, pending: 0 };
+    const m = months.get(key) ?? empty();
     const status = ledger.expenseStatus.get(e.id);
     m.spent += e.amount_eur;
+    m.count += 1;
     if (status === "validated" || status === "discrepancy") m.matched += e.amount_eur;
     else if (status === "reimbursed" || status === "no_note") m.received += e.amount_eur;
     else if (status === "pending" || status === "to_review") m.pending += e.amount_eur;
     months.set(key, m);
   }
-  const rows = [...months.entries()].sort((a, b) => b[0].localeCompare(a[0])).slice(0, 3);
-  if (rows.length === 0) return null;
+  if (months.size === 0) return null;
+
+  const [from, to] = periodRange(period);
+  const rows = [...months.entries()].filter(([k]) => k >= from && k <= to).sort((a, b) => b[0].localeCompare(a[0]));
+  const total = rows.reduce((t, [, m]) => add(t, m), empty());
+  const years = [...new Set(rows.map(([k]) => k.slice(0, 4)))];
+  const byYear = years.length > 1;
+  const yearTotal = (y: string) => rows.filter(([k]) => k.startsWith(y)).reduce((t, [, m]) => add(t, m), empty());
   const name = (key: string) => {
-    const s = new Date(`${key}-15T12:00:00`).toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+    const s = new Date(`${key}-15T12:00:00`).toLocaleDateString("fr-FR", { month: "long", ...(byYear ? {} : { year: "numeric" }) });
     return s.charAt(0).toUpperCase() + s.slice(1);
   };
+  const share = (part: number) => (total.spent > 0 ? Math.round((100 * part) / total.spent) : 0);
+
+  const cells = (m: Totals, strong = false) => (
+    <>
+      <td className={cn("py-2 text-right tabular-nums", strong && "font-semibold")}>{eur(m.spent)}</td>
+      <td className={cn("py-2 text-right tabular-nums", strong && "font-semibold")}>{eur(m.matched)}</td>
+      <td className={cn("py-2 text-right tabular-nums", strong && "font-semibold")}>{eur(m.received)}</td>
+      <td className={cn("py-2 text-right tabular-nums", (strong || m.pending > 0.005) && "font-medium", strong && "font-semibold")}>
+        {eur(m.pending)}
+      </td>
+    </>
+  );
 
   return (
     <section>
-      <h2 className="text-base font-semibold mb-3">Derniers mois</h2>
-      <table className="w-full max-w-4xl text-sm">
-        <thead className="text-muted-foreground">
-          <tr className="border-b">
-            <th className="text-left font-normal py-2">Mois</th>
-            <th className="text-right font-normal py-2">Dépenses pro</th>
-            <th className="text-right font-normal py-2">Remboursées et validées</th>
-            <th className="text-right font-normal py-2">Remboursées, relevé à venir</th>
-            <th className="text-right font-normal py-2">En attente</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map(([key, m]) => (
-            <tr key={key} className="border-b last:border-0">
-              <td className="py-2">{name(key)}</td>
-              <td className="py-2 text-right tabular-nums">{eur(m.spent)}</td>
-              <td className="py-2 text-right tabular-nums">{eur(m.matched)}</td>
-              <td className="py-2 text-right tabular-nums">{eur(m.received)}</td>
-              <td className={cn("py-2 text-right tabular-nums", m.pending > 0.005 && "font-medium")}>{eur(m.pending)}</td>
-            </tr>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-3 max-w-4xl">
+        <h2 className="text-base font-semibold">Par mois</h2>
+        <div className="flex flex-wrap gap-1" role="group" aria-label="Période">
+          {PERIODS.map(([value, label]) => (
+            <Button
+              key={value}
+              size="sm"
+              variant={period === value ? "secondary" : "ghost"}
+              aria-pressed={period === value}
+              onClick={() => setPeriod(value)}
+            >
+              {label}
+            </Button>
           ))}
-        </tbody>
-      </table>
+        </div>
+      </div>
+
+      {rows.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Aucune dépense pro sur cette période.</p>
+      ) : (
+        <>
+          <p className="text-sm text-muted-foreground mb-3 max-w-4xl">
+            {total.count} dépense{total.count > 1 ? "s" : ""} pro pour {eur(total.spent)} : {share(total.matched)} % remboursés et
+            validés, {share(total.received)} % remboursés en attente du relevé, {share(total.pending)} % pas encore remboursés.
+          </p>
+          <div className="overflow-x-auto max-w-4xl">
+            <table className="w-full text-sm min-w-[36rem]">
+              <thead className="text-muted-foreground">
+                <tr className="border-b">
+                  <th className="text-left font-normal py-2">Mois</th>
+                  <th className="text-right font-normal py-2">Dépenses pro</th>
+                  <th className="text-right font-normal py-2">Remboursées et validées</th>
+                  <th className="text-right font-normal py-2">Remboursées, relevé à venir</th>
+                  <th className="text-right font-normal py-2">En attente</th>
+                </tr>
+              </thead>
+              <tbody>
+                {years.map((y) => (
+                  <Fragment key={y}>
+                    {byYear && (
+                      <tr className="border-b bg-muted/40">
+                        <td className="py-2 font-semibold">{y}</td>
+                        {cells(yearTotal(y), true)}
+                      </tr>
+                    )}
+                    {rows
+                      .filter(([k]) => k.startsWith(y))
+                      .map(([key, m]) => (
+                        <tr key={key} className="border-b">
+                          <td className={cn("py-2", byYear && "pl-4")}>{name(key)}</td>
+                          {cells(m)}
+                        </tr>
+                      ))}
+                  </Fragment>
+                ))}
+              </tbody>
+              {rows.length > 1 && (
+                <tfoot>
+                  <tr>
+                    <td className="py-2 font-semibold">Total</td>
+                    {cells(total, true)}
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+        </>
+      )}
     </section>
   );
 }

@@ -79,6 +79,11 @@ export const jetfly_transfers = claim_batches
   .filter((b) => b.ref !== "DEMO 20260914 0908")
   .map((b, i) => ({ id: `20000000-0000-4000-8000-${String(i).padStart(12, "0")}`, date: b.payment_date, amount_eur: b.declared_total, label: "VIR SEPA JETFLY AVIATION S.A.", ignored: false }));
 
+expenses.push(
+  exp("2025-11-14", "HOTEL NOVOTEL LYON", 142.5),
+  exp("2025-12-03", "SNCF-VOYAGEURS PARIS", 88),
+);
+
 // October: no statement yet, paid back by transfers alone.
 expenses.push(
   exp("2026-10-20", "CARTE 20/10/26 INTERMARCHE", 31.27, "Boursobank"),

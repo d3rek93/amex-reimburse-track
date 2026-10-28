@@ -77,6 +77,15 @@ for (const [device, viewport] of [["desktop", { width: 1280, height: 900 }], ["m
         await page.keyboard.press("Escape");
       }
     }
+    if (name === "dashboard" && device === "desktop") {
+      const all = page.getByRole("button", { name: "Depuis le début" });
+      if (await all.count()) {
+        await all.click();
+        await page.waitForTimeout(200);
+        await page.screenshot({ path: `${out}/${device}-dashboard-all.png`, fullPage: true });
+        await page.getByRole("button", { name: "3 derniers mois" }).click();
+      }
+    }
     if (name === "notes" && device === "desktop") {
       const row = page.locator('tr[role="button"]').first();
       if (await row.count()) {
