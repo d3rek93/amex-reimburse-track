@@ -204,3 +204,22 @@ test("a rejected pair is never proposed again", () => {
   assert.equal(r.suggestions.length, 0);
   assert.deepEqual(r.unmatchedNoteIds, ["100018"]);
 });
+
+test("monthly bills are never proposed as a date typo", () => {
+  assert.ok(!looksLikeDateTypo("2026-01-25", "2026-09-25"), "eight months apart is a habit, not a typo");
+  const fee = bank("2026-09-25", 16, "VERSEMENT / COTISATION");
+  const r = reconcile({ lines: [fee], claimLines: [note("100019", "2026-01-25", "Other", "Bank card", 16)] });
+  assert.equal(r.suggestions.length, 0);
+  assert.deepEqual(r.unmatchedNoteIds, ["100019"]);
+});
+
+test("after a rejection, no other date guess is offered for the same note", () => {
+  const a = bank("2026-08-25", 43, "TAXI ADELINO LUXEMBOURG");
+  const b = bank("2026-07-25", 43, "TAXI ADELINO LUXEMBOURG");
+  const claimLines = [note("100020", "2026-06-25", "Positionning", "Taxi", 43)];
+  const first = reconcile({ lines: [a, b], claimLines });
+  assert.equal(first.suggestions[0].type, "date_mismatch");
+  const rejected = [{ noteId: "100020", lineId: first.suggestions[0].lineIds[0] }];
+  const second = reconcile({ lines: [a, b], claimLines, rejected });
+  assert.equal(second.suggestions.length, 0);
+});

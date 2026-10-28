@@ -28,6 +28,7 @@ const NOTE: Record<NoteStatus, [string, Tone]> = {
   to_review: ["À vérifier", "todo"],
   missing: ["Sans dépense", "missing"],
   cancelled: ["Annulée par Jetfly", "off"],
+  before_history: ["Avant tes relevés", "off"],
 };
 
 function Label({ text, tone, className }: { text: string; tone: Tone; className?: string }) {

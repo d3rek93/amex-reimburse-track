@@ -266,12 +266,19 @@ function combinations<T>(items: T[], k: number): T[][] {
  */
 const KIND_WINDOW: Partial<Record<Kind, number>> = { phone: 20 };
 
-/** Same day of month in another month, or day and month swapped: a typo, not a coincidence. */
+/**
+ * Same day of month one or two months away, or day and month swapped: a typo,
+ * not a coincidence. Further apart, a same-day match is just a monthly habit.
+ */
 export function looksLikeDateTypo(a: string, b: string): boolean {
-  const [, am, ad] = a.split("-");
-  const [, bm, bd] = b.split("-");
-  return (ad === bd && am !== bm) || (ad === bm && am === bd);
+  const [ay, am, ad] = a.split("-").map(Number);
+  const [by, bm, bd] = b.split("-").map(Number);
+  const monthGap = Math.abs(ay * 12 + am - (by * 12 + bm));
+  return (ad === bd && monthGap >= 1 && monthGap <= 2) || (ay === by && ad === bm && am === bd && am !== ad);
 }
+
+/** Bills that come back every month for the same amount: a far date is the next bill, not a typo. */
+const RECURRING: Kind[] = ["phone", "card_fee"];
 
 // ----------------------------------------------------------------- engine
 
@@ -518,9 +525,11 @@ export function reconcile(input: ReconcileInput, options: ReconcileOptions = {})
 
   // 6. Same amount and kind, but the dates are far apart: usually a mistyped date on the note.
   const suggestedNow = new Set(suggestions.flatMap((x) => [...x.noteIds, ...x.lineIds]));
+  // A note the user already turned a proposal down for gets no more speculative date guesses.
+  const rejectedNotes = new Set((input.rejected ?? []).map((r) => r.noteId));
   const lateClaims = [...openClaims]
     .map((n) => claimById.get(n)!)
-    .filter((c) => c.amount > 0 && !suggestedNow.has(c.noteId));
+    .filter((c) => c.amount > 0 && !suggestedNow.has(c.noteId) && !rejectedNotes.has(c.noteId) && !RECURRING.includes(c.kind));
   const lateLines = [...openLines]
     .map((id) => lineById.get(id)!)
     .filter((l) => l.amount > 0 && !suggestedNow.has(l.id));

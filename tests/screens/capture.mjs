@@ -67,6 +67,15 @@ for (const [device, viewport] of [["desktop", { width: 1280, height: 900 }], ["m
       if (await first.count()) await first.click();
     }
     await page.screenshot({ path: `${out}/${device}-${name}.png`, fullPage: true });
+    if (name === "reconcile-review" && device === "desktop") {
+      const other = page.getByRole("button", { name: "Autre dépense…" }).first();
+      if (await other.count()) {
+        await other.click();
+        await page.waitForTimeout(300);
+        await page.screenshot({ path: `${out}/${device}-reconcile-pick.png` });
+        await page.keyboard.press("Escape");
+      }
+    }
   }
   await context.close();
 }

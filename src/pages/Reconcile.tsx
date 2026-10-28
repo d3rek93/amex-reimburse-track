@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useLedger, useLedgerActions, type ExpenseRow, type Ledger, type MatchView } from "@/lib/ledger";
 import type { Claim, Match } from "@/lib/reconciliation";
@@ -88,9 +89,23 @@ function Section({ title, hint, children }: { title: string; hint: string; child
 // -------------------------------------------------------------- review
 
 function Review({ ledger }: { ledger: Ledger }) {
-  const actions = useLedgerActions();
+  const base = useLedgerActions();
   const { busy, run } = useRunner();
+  const { toast } = useToast();
+  const [picking, setPicking] = useState<string[] | null>(null);
   const s = ledger.result.suggestions;
+  const actions = {
+    ...base,
+    reject: async (m: Match) => {
+      await base.reject(m);
+      toast({ title: "Proposition écartée", description: "Elle ne sera plus proposée. La note reste dans « Sans correspondance »." });
+    },
+  };
+  const other = (m: Match) => (
+    <Button size="sm" variant="ghost" disabled={busy !== null} onClick={() => setPicking(m.noteIds)}>
+      Autre dépense…
+    </Button>
+  );
 
   const amountGaps = s.filter((m) => m.type === "mismatch");
   const dateGaps = s.filter((m) => m.type === "date_mismatch");
@@ -118,6 +133,7 @@ function Review({ ledger }: { ledger: Ledger }) {
 
   return (
     <div className="space-y-10">
+      <PickExpenses ledger={ledger} noteIds={picking} onClose={() => setPicking(null)} />
       {amountGaps.length > 0 && (
         <Section
           title="Écarts de montant"
@@ -143,6 +159,7 @@ function Review({ ledger }: { ledger: Ledger }) {
                   <Button size="sm" variant="ghost" disabled={busy !== null} onClick={() => run(key(m), () => actions.reject(m))}>
                     Ce n'est pas la même dépense
                   </Button>
+                  {other(m)}
                 </>
               }
             />
@@ -176,6 +193,7 @@ function Review({ ledger }: { ledger: Ledger }) {
                     <Button size="sm" variant="ghost" disabled={busy !== null} onClick={() => run(key(m), () => actions.reject(m))}>
                       Non
                     </Button>
+                    {other(m)}
                   </>
                 }
               />
@@ -190,7 +208,7 @@ function Review({ ledger }: { ledger: Ledger }) {
           hint="Plusieurs dépenses ont le montant exact de la note. Choisis la bonne."
         >
           {choices.map((list) => (
-            <Choice key={list[0].noteIds.join(",")} ledger={ledger} list={list} actions={actions} busy={busy} run={run} />
+            <Choice key={list[0].noteIds.join(",")} ledger={ledger} list={list} actions={actions} busy={busy} run={run} onOther={() => setPicking(list[0].noteIds)} />
           ))}
         </Section>
       )}
@@ -213,6 +231,7 @@ function Review({ ledger }: { ledger: Ledger }) {
                   <Button size="sm" variant="ghost" disabled={busy !== null} onClick={() => run(key(m), () => actions.reject(m))}>
                     Non
                   </Button>
+                  {other(m)}
                 </>
               }
             />
@@ -254,10 +273,12 @@ function Choice({
   actions,
   busy,
   run,
+  onOther,
 }: {
   ledger: Ledger;
   list: Match[];
-  actions: Actions;
+  actions: Pick<Actions, "confirm" | "reject">;
+  onOther: () => void;
   busy: string | null;
   run: (key: string, fn: () => Promise<unknown>, done?: string) => Promise<void>;
 }) {
@@ -294,7 +315,10 @@ function Choice({
           );
         })}
       </div>
-      <div className="border-t px-4 py-2 flex justify-end">
+      <div className="border-t px-4 py-2 flex justify-end gap-2">
+        <Button size="sm" variant="ghost" disabled={busy !== null} onClick={onOther}>
+          Autre dépense…
+        </Button>
         <Button
           size="sm"
           variant="ghost"
@@ -307,6 +331,96 @@ function Choice({
         </Button>
       </div>
     </div>
+  );
+}
+
+/** Associate a note with expenses picked by hand, when the proposal was wrong. */
+function PickExpenses({ ledger, noteIds, onClose }: { ledger: Ledger; noteIds: string[] | null; onClose: () => void }) {
+  const { associate } = useLedgerActions();
+  const { busy, run } = useRunner();
+  const [query, setQuery] = useState("");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const notes = noteIds ? claimsOf(ledger, noteIds) : [];
+  const target = notes.reduce((s, c) => s + c.amount, 0);
+  const date = notes[0]?.date ?? "";
+
+  const q = query.trim().toLowerCase().replace(",", ".");
+  const free = ledger.expenses.filter((e) => {
+    const st = ledger.expenseStatus.get(e.id);
+    return e.amount_eur > 0 && (st === "pending" || st === "to_review");
+  });
+  const days = (a: string, b: string) => Math.abs(Date.parse(a) - Date.parse(b)) / 86400000;
+  const candidates = free
+    .filter((e) => !q || e.description.toLowerCase().includes(q) || e.amount_eur.toFixed(2).includes(q))
+    .sort((a, b) => Math.abs(a.amount_eur - target) - Math.abs(b.amount_eur - target) || days(a.date, date) - days(b.date, date))
+    .slice(0, 40);
+  const total = [...selected].reduce((s, id) => s + (ledger.expenseById.get(id)?.amount_eur ?? 0), 0);
+  const difference = Math.round((total - target) * 100) / 100;
+
+  const close = () => {
+    setSelected(new Set());
+    setQuery("");
+    onClose();
+  };
+
+  return (
+    <Dialog open={noteIds !== null} onOpenChange={(o) => !o && close()}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Choisir la dépense</DialogTitle>
+          <DialogDescription>
+            {notes.map((n) => `${categoryLabel(n.category, n.subcategory)}, note ${n.noteId}, ${shortDate(n.date)} : ${eur(n.amount)}`).join(" ; ")}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" aria-hidden />
+          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Libellé ou montant" className="pl-9" aria-label="Chercher une dépense" />
+        </div>
+        <p className="text-xs text-muted-foreground">Dépenses encore libres, de la plus proche en montant à la plus éloignée.</p>
+        <div className="rounded-lg border divide-y max-h-[50vh] overflow-y-auto">
+          {candidates.length === 0 ? (
+            <p className="px-4 py-3 text-sm text-muted-foreground">Aucune dépense libre ne correspond.</p>
+          ) : (
+            candidates.map((e) => (
+              <SelectableRow
+                key={e.id}
+                checked={selected.has(e.id)}
+                onToggle={() => {
+                  const next = new Set(selected);
+                  if (next.has(e.id)) next.delete(e.id);
+                  else next.add(e.id);
+                  setSelected(next);
+                }}
+                date={e.date}
+                label={
+                  <>
+                    <span>{e.description}</span>
+                    <span className="text-muted-foreground"> · {e.source}</span>
+                  </>
+                }
+                amount={e.amount_eur}
+              />
+            ))
+          )}
+        </div>
+        <DialogFooter className="items-center gap-2 sm:justify-between">
+          <span className={cn("text-sm tabular-nums", selected.size === 0 ? "text-muted-foreground" : Math.abs(difference) >= 0.005 ? "text-warning" : "text-success")}>
+            {selected.size === 0 ? "Aucune dépense choisie" : Math.abs(difference) >= 0.005 ? `Écart ${signedEur(difference)}` : "Montants identiques"}
+          </span>
+          <div className="flex gap-2">
+            <Button variant="ghost" onClick={close}>Annuler</Button>
+            <Button
+              disabled={selected.size === 0 || busy !== null || !noteIds}
+              onClick={() =>
+                run("pick", () => associate(noteIds!, [...selected], difference, Math.abs(difference) >= 0.005 ? "Écart accepté à l'association" : undefined), "Associées").then(close)
+              }
+            >
+              {Math.abs(difference) >= 0.005 && selected.size > 0 ? `Associer avec un écart de ${eur(Math.abs(difference))}` : "Associer"}
+            </Button>
+          </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -323,7 +437,8 @@ function Unmatched({ ledger }: { ledger: Ledger }) {
   const matches = (text: string, amount: number) =>
     !q || text.toLowerCase().includes(q) || amount.toFixed(2).includes(q);
 
-  const notes = claimsOf(ledger, ledger.result.unmatchedNoteIds)
+  const hidden = ledger.beforeHistoryNoteIds.length;
+  const notes = claimsOf(ledger, ledger.result.unmatchedNoteIds.filter((n) => ledger.noteStatus.get(n) === "missing"))
     .filter((c) => matches(`${c.noteId} ${categoryLabel(c.category, c.subcategory)}`, c.amount))
     .sort((a, b) => b.date.localeCompare(a.date));
   const expenses = expensesOf(ledger, ledger.result.unmatchedLineIds)
@@ -350,6 +465,7 @@ function Unmatched({ ledger }: { ledger: Ledger }) {
         Ce qui n'a trouvé aucune correspondance. Coche une ou plusieurs notes et la ou les dépenses qui vont avec, puis
         associe-les. Une dépense sans note peut aussi être perso.
       </p>
+      {hidden > 0 && <HistoryNotice ledger={ledger} hidden={hidden} />}
       <div className="relative max-w-sm">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" aria-hidden />
         <Input
@@ -450,6 +566,36 @@ function Unmatched({ ledger }: { ledger: Ledger }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Notes older than the bank data are hidden; offer to fetch a longer history. */
+function HistoryNotice({ ledger, hidden }: { ledger: Ledger; hidden: number }) {
+  const { refresh } = useLedgerActions();
+  const { busy, run } = useRunner();
+  return (
+    <div className="rounded-lg border bg-muted/40 px-4 py-3 text-sm flex flex-wrap items-center gap-3 max-w-3xl">
+      <p className="flex-1 min-w-[16rem]">
+        {hidden} note{hidden > 1 ? "s" : ""} Jetfly antérieure{hidden > 1 ? "s" : ""} à tes relevés bancaires
+        {ledger.historyStart ? ` (avant le ${shortDate(ledger.historyStart)})` : ""} ne
+        {hidden > 1 ? " sont" : " est"} pas affichée{hidden > 1 ? "s" : ""} : leur dépense ne peut pas encore être retrouvée.
+      </p>
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={busy !== null}
+        onClick={() =>
+          run("history", async () => {
+            const { runBankSync } = await import("@/lib/bankSync");
+            const s = await runBankSync(540);
+            await refresh();
+            if (s.errors.length) throw new Error(s.errors.join(" ; "));
+          }, "Historique récupéré")
+        }
+      >
+        {busy === "history" ? "Récupération…" : "Récupérer plus d'historique bancaire"}
+      </Button>
     </div>
   );
 }

@@ -96,8 +96,14 @@ function Batch({ batch, ledger }: { batch: BatchView; ledger: Ledger }) {
           {issues > 0 && <span className="text-primary"> dont {issues} à traiter</span>}
           <span className="text-muted-foreground"> · {batch.ref}</span>
         </span>
-        <span className={cn("text-sm", batch.transfer ? "text-success" : "text-warning")}>
-          {batch.transfer ? `Virement reçu le ${shortDate(batch.transfer.date)}` : batch.linesTotal > 0 ? "Virement non trouvé" : ""}
+        <span className={cn("text-sm", batch.transfer ? "text-success" : batch.beforeHistory ? "text-muted-foreground" : "text-warning")}>
+          {batch.transfer
+            ? `Virement reçu le ${shortDate(batch.transfer.date)}`
+            : batch.beforeHistory
+              ? "Avant tes relevés"
+              : batch.linesTotal > 0
+                ? "Virement non trouvé"
+                : ""}
         </span>
         <span className="w-24 text-right tabular-nums font-medium">{eur(batch.linesTotal)}</span>
       </button>

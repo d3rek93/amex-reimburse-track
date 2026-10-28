@@ -57,6 +57,8 @@ export interface BatchView {
   linesTotal: number;
   transfer: TransferRow | null;
   noteIds: string[];
+  /** Paid before the oldest Boursobank line on file: its transfer cannot be checked. */
+  beforeHistory: boolean;
 }
 
 export type ExpenseStatus =
@@ -68,7 +70,7 @@ export type ExpenseStatus =
   | "neutralized"
   | "refund";
 
-export type NoteStatus = "matched" | "discrepancy" | "to_review" | "missing" | "cancelled";
+export type NoteStatus = "matched" | "discrepancy" | "to_review" | "missing" | "cancelled" | "before_history";
 
 /** A match as shown in the UI: confirmed ones carry the link id they come from. */
 export interface MatchView extends Match {
@@ -90,6 +92,10 @@ export interface Ledger {
   matchOfNote: Map<string, MatchView>;
   /** Unclaimed expenses at merchants the user already marked as personal. */
   personalSuggestions: string[];
+  /** Oldest bank line on file (notes before it cannot be checked). */
+  historyStart: string | null;
+  /** Notes older than the bank history, left out of the lists to handle. */
+  beforeHistoryNoteIds: string[];
   advance: AdvancePosition;
   lastSyncedAt: string | null;
   counts: {
@@ -242,6 +248,21 @@ export function buildLedger(raw: RawData): Ledger {
     expenseStatus.set(e.id, status);
   }
 
+  // How far back the bank data goes; a few days of slack for booking delays.
+  const minDate = (dates: string[]) => (dates.length ? dates.reduce((a, b) => (b < a ? b : a)) : null);
+  const shiftDays = (iso: string, days: number) => {
+    const d = new Date(`${iso}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + days);
+    return d.toISOString().slice(0, 10);
+  };
+  const bankDates = raw.expenses.filter((e) => !String(e.bank_transaction_id ?? "").startsWith("manual:")).map((e) => e.date);
+  const historyStart = minDate(bankDates);
+  const boursoStart = minDate([
+    ...raw.expenses.filter((e) => e.source === "Boursobank" || e.source === "Prélèvement").map((e) => e.date),
+    ...raw.transfers.map((t) => t.date),
+  ]);
+  const notesFrom = historyStart ? shiftDays(historyStart, 3) : null;
+
   const noteStatus = new Map<string, NoteStatus>();
   for (const c of result.claims) {
     const m = matchOfNote.get(c.noteId);
@@ -249,9 +270,12 @@ export function buildLedger(raw: RawData): Ledger {
     if (c.cancelled) status = "cancelled";
     else if (m) status = Math.abs(m.difference) >= 0.005 ? "discrepancy" : "matched";
     else if (inSuggestion.has(c.noteId)) status = "to_review";
+    else if (!notesFrom || c.date < notesFrom) status = "before_history";
     else status = "missing";
     noteStatus.set(c.noteId, status);
   }
+  const beforeHistoryNoteIds = result.claims.filter((c) => noteStatus.get(c.noteId) === "before_history").map((c) => c.noteId);
+  const missingNoteIds = result.unmatchedNoteIds.filter((n) => noteStatus.get(n) === "missing");
 
   // Merchants the user marked as personal before.
   const personalMerchants = new Set(raw.expenses.filter((e) => e.is_personal).map((e) => merchantKey(e.description)));
@@ -270,6 +294,7 @@ export function buildLedger(raw: RawData): Ledger {
       linesTotal: b.total,
       transfer: b.transferId ? transferById.get(b.transferId) ?? null : null,
       noteIds: [...new Set(claimLines.filter((l) => l.batchRef === b.ref).map((l) => l.noteId))],
+      beforeHistory: !b.transferId && (!boursoStart || b.paymentDate < boursoStart),
     }))
     .sort((a, b) => b.paymentDate.localeCompare(a.paymentDate));
 
@@ -309,15 +334,17 @@ export function buildLedger(raw: RawData): Ledger {
     matchOfExpense,
     matchOfNote,
     personalSuggestions,
+    historyStart,
+    beforeHistoryNoteIds,
     advance,
     lastSyncedAt: raw.lastSyncedAt,
     counts: {
       toReview: reviewGroups.size + personalSuggestions.length,
       discrepancies: result.suggestions.filter(isDiscrepancy).length,
-      missingNotes: result.unmatchedNoteIds.length,
+      missingNotes: missingNoteIds.length,
       unclaimedExpenses: result.unmatchedLineIds.filter((id) => (expenseById.get(id)?.amount_eur ?? 0) > 0).length,
       personalSuggestions: personalSuggestions.length,
-      batchesWithoutTransfer: batches.filter((b) => !b.transfer && b.linesTotal > 0).length,
+      batchesWithoutTransfer: batches.filter((b) => !b.transfer && !b.beforeHistory && b.linesTotal > 0).length,
     },
   };
 }
