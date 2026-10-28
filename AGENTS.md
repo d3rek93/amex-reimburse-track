@@ -12,5 +12,6 @@
 - Backend: self-owned Supabase project `uynegxjtcthcmqgbosvh` (see `supabase/config.toml`). Lovable Cloud is no longer used.
 - Schema lives in `supabase/migrations/`; the Lovable history is archived in `supabase/legacy-migrations/` and is never applied.
 - Migrations and edge functions deploy through `.github/workflows/deploy-supabase.yml`; the app builds through `.github/workflows/ci.yml`.
-- Edge function secrets: `ENABLE_BANKING_APPLICATION_ID`, `ENABLE_BANKING_PRIVATE_KEY`, `APP_URL` (public app origin, used for the `/bank-callback` redirect).
+- Edge function secrets: `ENABLE_BANKING_APPLICATION_ID`, `ENABLE_BANKING_PRIVATE_KEY` (set by hand in the Supabase dashboard) and `APP_URL` (set by the deploy workflow).
+- App hosted on Render as a static site (`render.yaml`): https://expense-tracker-vwac.onrender.com. Changing this domain means updating `APP_URL` in the deploy workflow and the redirect URL in the Enable Banking control panel.
 - Enable Banking is the primary source of bank operations; PDF and CSV imports are fallbacks.
