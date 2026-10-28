@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Loader2, Plus, Search, Trash2 } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
-import { ExpenseStatusLabel, EXPENSE_STATUS_LABELS } from "@/components/StatusLabel";
+import { ExpenseStatusPair, EXPENSE_STATUS_LABELS } from "@/components/StatusLabel";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { useLedger, useLedgerActions, type ExpenseStatus } from "@/lib/ledger";
-import { dayDate, eur } from "@/lib/format";
+import { dayDate, eur, shortDate } from "@/lib/format";
 
 const PAGE = 100;
 
@@ -43,6 +43,10 @@ export default function ExpensesPage() {
   }, [ledger, query, status, source, from, to]);
 
   const total = rows.reduce((s, e) => s + e.amount_eur, 0);
+  const received = (id: string) => {
+    const r = ledger?.reimbursementOf.get(id);
+    return r ? shortDate(r.date) : undefined;
+  };
   const sources = ledger ? [...new Set(ledger.expenses.map((e) => e.source ?? "AMEX"))].sort() : [];
 
   const togglePersonal = async (id: string, personal: boolean) => {
@@ -123,7 +127,7 @@ export default function ExpensesPage() {
                       {match && <span className="tabular-nums">note {match.noteIds.join(", ")}</span>}
                     </div>
                     <div className="flex items-center justify-between gap-3">
-                      <ExpenseStatusLabel status={st} />
+                      <ExpenseStatusPair status={st} receivedOn={received(e.id)} />
                       <label className="flex items-center gap-2 text-muted-foreground">
                         Perso
                         <Switch checked={e.is_personal} onCheckedChange={(v) => void togglePersonal(e.id, v)} />
@@ -140,7 +144,7 @@ export default function ExpensesPage() {
                     <th className="text-left font-normal px-4 py-2">Date</th>
                     <th className="text-left font-normal px-4 py-2">Libellé</th>
                     <th className="text-right font-normal px-4 py-2">Montant</th>
-                    <th className="text-left font-normal px-4 py-2">Statut</th>
+                    <th className="text-left font-normal px-4 py-2">Remboursement et validation</th>
                     <th className="text-left font-normal px-4 py-2">Note</th>
                     <th className="text-left font-normal px-4 py-2">Perso</th>
                     <th className="px-2 py-2"><span className="sr-only">Actions</span></th>
@@ -161,7 +165,7 @@ export default function ExpensesPage() {
                           </p>
                         </td>
                         <td className="px-4 py-2 text-right tabular-nums font-medium whitespace-nowrap">{eur(e.amount_eur)}</td>
-                        <td className="px-4 py-2"><ExpenseStatusLabel status={st} /></td>
+                        <td className="px-4 py-2"><ExpenseStatusPair status={st} receivedOn={received(e.id)} /></td>
                         <td className="px-4 py-2 tabular-nums text-muted-foreground">{match?.noteIds.join(", ") || ""}</td>
                         <td className="px-4 py-2">
                           <Switch

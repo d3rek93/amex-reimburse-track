@@ -12,14 +12,43 @@ const TONE: Record<Tone, string> = {
   missing: "bg-destructive",
 };
 
+/** One-line summary, used for filters and compact places. */
 const EXPENSE: Record<ExpenseStatus, [string, Tone]> = {
-  reimbursed: ["Remboursée", "ok"],
-  discrepancy: ["Écart accepté", "warn"],
+  validated: ["Remboursée et validée", "ok"],
+  discrepancy: ["Remboursée, écart accepté", "warn"],
+  reimbursed: ["Remboursée, relevé à venir", "ok"],
+  no_note: ["Remboursée sans note Jetfly", "missing"],
   to_review: ["À vérifier", "todo"],
-  pending: ["En attente", "wait"],
+  pending: ["En attente de remboursement", "wait"],
   personal: ["Perso", "off"],
   neutralized: ["Annulée par un avoir", "off"],
   refund: ["Avoir", "off"],
+};
+
+/** Has the money come back? */
+const REFUND: Record<ExpenseStatus, [string, Tone] | null> = {
+  validated: ["Reçu", "ok"],
+  discrepancy: ["Reçu", "ok"],
+  reimbursed: ["Reçu", "ok"],
+  no_note: ["Reçu", "ok"],
+  to_review: ["En attente", "wait"],
+  pending: ["En attente", "wait"],
+  personal: null,
+  neutralized: null,
+  refund: null,
+};
+
+/** Has the Jetfly expense department validated it? */
+const VALIDATION: Record<ExpenseStatus, [string, Tone] | null> = {
+  validated: ["Validée", "ok"],
+  discrepancy: ["Écart accepté", "warn"],
+  reimbursed: ["Relevé à venir", "wait"],
+  no_note: ["Absente du relevé", "missing"],
+  to_review: ["À vérifier", "todo"],
+  pending: ["Pas encore de note", "wait"],
+  personal: null,
+  neutralized: null,
+  refund: null,
 };
 
 const NOTE: Record<NoteStatus, [string, Tone]> = {
@@ -43,6 +72,19 @@ function Label({ text, tone, className }: { text: string; tone: Tone; className?
 export const ExpenseStatusLabel = ({ status, className }: { status: ExpenseStatus; className?: string }) => (
   <Label text={EXPENSE[status][0]} tone={EXPENSE[status][1]} className={className} />
 );
+
+/** Two indicators: money received (bank) and validation (Jetfly statement). */
+export const ExpenseStatusPair = ({ status, receivedOn, className }: { status: ExpenseStatus; receivedOn?: string; className?: string }) => {
+  const refund = REFUND[status];
+  const validation = VALIDATION[status];
+  if (!refund || !validation) return <ExpenseStatusLabel status={status} className={className} />;
+  return (
+    <span className={cn("inline-flex flex-col gap-0.5", className)}>
+      <Label text={refund[0] === "Reçu" && receivedOn ? `Reçu le ${receivedOn}` : refund[0]} tone={refund[1]} />
+      <Label text={validation[0]} tone={validation[1]} />
+    </span>
+  );
+};
 
 export const NoteStatusLabel = ({ status, className }: { status: NoteStatus; className?: string }) => (
   <Label text={NOTE[status][0]} tone={NOTE[status][1]} className={className} />

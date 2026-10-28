@@ -77,7 +77,20 @@ export const claim_batches = [...new Set(claim_lines.map((l) => l.batch_ref))].m
 
 export const jetfly_transfers = claim_batches
   .filter((b) => b.ref !== "DEMO 20260914 0908")
-  .map((b, i) => ({ id: `20000000-0000-4000-8000-${String(i).padStart(12, "0")}`, date: b.payment_date, amount_eur: b.declared_total, label: "VIR SEPA JETFLY AVIATION S.A." }));
+  .map((b, i) => ({ id: `20000000-0000-4000-8000-${String(i).padStart(12, "0")}`, date: b.payment_date, amount_eur: b.declared_total, label: "VIR SEPA JETFLY AVIATION S.A.", ignored: false }));
+
+// October: no statement yet, paid back by transfers alone.
+expenses.push(
+  exp("2026-10-20", "CARTE 20/10/26 INTERMARCHE", 31.27, "Boursobank"),
+  exp("2026-10-21", "TAXI G7 EMV2 CLICHY", 40),
+  exp("2026-10-21", "RESTAURANT LE PORT", 60),
+  exp("2026-10-23", "HOTEL MERCURE METZ", 120),
+);
+jetfly_transfers.push(
+  { id: "30000000-0000-4000-8000-000000000001", date: "2026-10-22", amount_eur: 31.27, label: "VIR SEPA JETFLY AVIATION S.A.", ignored: false },
+  { id: "30000000-0000-4000-8000-000000000002", date: "2026-10-23", amount_eur: 100, label: "VIR SEPA JETFLY AVIATION S.A.", ignored: false },
+  { id: "30000000-0000-4000-8000-000000000003", date: "2026-09-15", amount_eur: 1500, label: "VIR SEPA JETFLY AVIATION S.A.", ignored: false },
+);
 
 export const reconciliation_links = [];
 export const reconciliation_rejections = [];

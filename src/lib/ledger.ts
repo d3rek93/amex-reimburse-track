@@ -8,6 +8,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import {
+  allocateTransfers,
   learnRules,
   buildClaims,
   merchantKey,
@@ -17,6 +18,7 @@ import {
   type ClaimLine,
   type Match,
   type ReconcileResult,
+  type Reimbursement,
 } from "./reconciliation";
 import { computeAdvancePosition, type AccountSnapshot, type AdvancePosition } from "./advance";
 import type { ParsedBatch, ParsedClaimLine, ParsedExpense, ParsedSnapshot, ParsedTransfer } from "./importers";
@@ -48,6 +50,7 @@ export interface TransferRow {
   date: string;
   amount_eur: number;
   label: string;
+  ignored: boolean;
 }
 
 export interface BatchView {
@@ -61,14 +64,32 @@ export interface BatchView {
   beforeHistory: boolean;
 }
 
+/**
+ * Two questions per pro expense: has the money come back (bank), and has the
+ * Jetfly expense department validated it (statement)?
+ * - validated: paid back and matched to its note, same amount
+ * - discrepancy: paid back through a note whose amount differs (accepted)
+ * - reimbursed: a transfer paid it back; the statement that covers it is not in yet
+ * - no_note: paid back by a transfer, yet absent from a statement already in: anomaly
+ * - to_review / pending: not paid back yet (pending), with proposals (to_review)
+ */
 export type ExpenseStatus =
   | "personal"
-  | "reimbursed"
+  | "validated"
   | "discrepancy"
+  | "reimbursed"
+  | "no_note"
   | "to_review"
   | "pending"
   | "neutralized"
   | "refund";
+
+export type TransferStatus = "statement" | "bank" | "to_split" | "absent" | "before_statements" | "ignored";
+
+export interface TransferView extends TransferRow {
+  status: TransferStatus;
+  lineIds: string[];
+}
 
 export type NoteStatus = "matched" | "discrepancy" | "to_review" | "missing" | "cancelled" | "before_history";
 
@@ -94,6 +115,11 @@ export interface Ledger {
   matchOfNote: Map<string, MatchView>;
   /** Unclaimed expenses at merchants the user already marked as personal. */
   personalSuggestions: string[];
+  /** How each pro expense was paid back, when it was. */
+  reimbursementOf: Map<string, Reimbursement>;
+  transferViews: TransferView[];
+  /** Last Jetfly payment date covered by an imported statement. */
+  statementsEnd: string | null;
   /** Oldest bank line on file (notes before it cannot be checked). */
   historyStart: string | null;
   /** Notes older than the bank history, left out of the lists to handle. */
@@ -101,6 +127,12 @@ export interface Ledger {
   advance: AdvancePosition;
   lastSyncedAt: string | null;
   counts: {
+    /** Paid back by a transfer, yet absent from statements already in. */
+    noNote: number;
+    /** Transfers inside the statements' period that no statement explains. */
+    absentTransfers: number;
+    /** Transfers after the last statement, not yet split among expenses. */
+    toSplit: number;
     toReview: number;
     discrepancies: number;
     missingNotes: number;
@@ -161,7 +193,7 @@ async function loadRaw(): Promise<RawData> {
       "payment_date",
     ),
     readAll<RawData["batches"][number]>("claim_batches", "ref, payment_date, declared_total", "payment_date"),
-    readAll<TransferRow>("jetfly_transfers", "id, date, amount_eur, label", "date"),
+    readAll<TransferRow>("jetfly_transfers", "id, date, amount_eur, label, ignored", "date"),
     readAll<LinkRow>("reconciliation_links", "id, note_ids, expense_ids, difference, comment", "created_at"),
     readAll<RawData["rejections"][number]>("reconciliation_rejections", "note_id, expense_id", "created_at"),
     supabase
@@ -180,7 +212,7 @@ async function loadRaw(): Promise<RawData> {
     expenses: expenses.map((e) => ({ ...e, amount_eur: n(e.amount_eur), original_amount: nOrNull(e.original_amount) })),
     claimLines: claimLines.map((l) => ({ ...l, amount_eur: n(l.amount_eur) })),
     batches: batches.map((b) => ({ ...b, declared_total: n(b.declared_total) })),
-    transfers: transfers.map((t) => ({ ...t, amount_eur: n(t.amount_eur) })),
+    transfers: transfers.map((t) => ({ ...t, amount_eur: n(t.amount_eur), ignored: Boolean(t.ignored) })),
     links: links.map((l) => ({ ...l, difference: n(l.difference) })),
     rejections,
     snapshot: (snap.data as AccountSnapshot | null) ?? null,
@@ -215,7 +247,7 @@ export function buildLedger(raw: RawData): Ledger {
   const result = reconcile({
     lines,
     claimLines,
-    transfers: raw.transfers.map((t) => ({ id: t.id, date: t.date, amount: t.amount_eur })),
+    transfers: raw.transfers.filter((t) => !t.ignored).map((t) => ({ id: t.id, date: t.date, amount: t.amount_eur })),
     confirmed,
     rejected: raw.rejections.map((r) => ({ noteId: r.note_id, lineId: r.expense_id })),
     rules,
@@ -237,13 +269,46 @@ export function buildLedger(raw: RawData): Ledger {
   const inSuggestion = new Set(result.suggestions.flatMap((s) => [...s.noteIds, ...s.lineIds]));
   const neutralized = new Set(result.neutralized.flat());
 
+  // Money received: which transfer paid back which expense.
+  const activeTransfers = raw.transfers.filter((t) => !t.ignored);
+  const allocation = allocateTransfers(
+    result,
+    lines,
+    activeTransfers.map((t) => ({ id: t.id, date: t.date, amount: t.amount_eur })),
+  );
+  const batchDates = result.batches.map((b) => b.paymentDate).sort();
+  const statementsStart = batchDates[0] ?? null;
+  const statementsEnd = batchDates[batchDates.length - 1] ?? null;
+  const transferLines = new Map<string, string[]>();
+  for (const [lineId, r] of allocation.byLine) {
+    if (r.transferId) transferLines.set(r.transferId, [...(transferLines.get(r.transferId) ?? []), lineId]);
+  }
+  const usedByBatch = new Set(result.batches.map((b) => b.transferId).filter(Boolean) as string[]);
+  const unallocated = new Set(allocation.unallocated);
+  const transferViews: TransferView[] = raw.transfers
+    .map((t) => {
+      let status: TransferStatus;
+      if (t.ignored) status = "ignored";
+      else if (usedByBatch.has(t.id)) status = "statement";
+      else if (statementsStart && t.date < statementsStart) status = "before_statements";
+      else if (statementsEnd && t.date <= statementsEnd) status = "absent";
+      else if (unallocated.has(t.id)) status = "to_split";
+      else status = "bank";
+      return { ...t, status, lineIds: transferLines.get(t.id) ?? [] };
+    })
+    .sort((a, b) => b.date.localeCompare(a.date));
+  const absentTransfers = new Set(transferViews.filter((t) => t.status === "absent").map((t) => t.id));
+
   const expenseStatus = new Map<string, ExpenseStatus>();
   for (const e of raw.expenses) {
     const m = matchOfExpense.get(e.id);
+    const paid = allocation.byLine.get(e.id);
     let status: ExpenseStatus;
     if (e.is_personal) status = "personal";
-    else if (m) status = Math.abs(m.difference) >= 0.005 ? "discrepancy" : "reimbursed";
+    else if (m) status = Math.abs(m.difference) >= 0.005 ? "discrepancy" : "validated";
     else if (neutralized.has(e.id)) status = "neutralized";
+    else if (paid && paid.transferId && absentTransfers.has(paid.transferId)) status = "no_note";
+    else if (paid) status = "reimbursed";
     else if (inSuggestion.has(e.id)) status = "to_review";
     else if (e.amount_eur < 0) status = "refund";
     else status = "pending";
@@ -305,7 +370,7 @@ export function buildLedger(raw: RawData): Ledger {
     raw.snapshot,
     raw.expenses.map((e) => {
       const status = expenseStatus.get(e.id)!;
-      const reimbursed = status === "reimbursed" || status === "discrepancy" || status === "neutralized";
+      const reimbursed = ["validated", "discrepancy", "reimbursed", "no_note", "neutralized"].includes(status);
       return {
         id: e.id,
         date: e.date,
@@ -336,15 +401,27 @@ export function buildLedger(raw: RawData): Ledger {
     matchOfExpense,
     matchOfNote,
     personalSuggestions,
+    reimbursementOf: allocation.byLine,
+    transferViews,
+    statementsEnd,
     historyStart,
     beforeHistoryNoteIds,
     advance,
     lastSyncedAt: raw.lastSyncedAt,
     counts: {
-      toReview: reviewGroups.size + personalSuggestions.length,
+      noNote: [...expenseStatus.values()].filter((s) => s === "no_note").length,
+      absentTransfers: absentTransfers.size,
+      toSplit: transferViews.filter((t) => t.status === "to_split").length,
+      toReview:
+        reviewGroups.size +
+        personalSuggestions.length +
+        [...expenseStatus.values()].filter((s) => s === "no_note").length +
+        transferViews.filter((t) => t.status === "absent" && t.lineIds.length === 0).length,
       discrepancies: result.suggestions.filter(isDiscrepancy).length,
       missingNotes: missingNoteIds.length,
-      unclaimedExpenses: result.unmatchedLineIds.filter((id) => (expenseById.get(id)?.amount_eur ?? 0) > 0).length,
+      unclaimedExpenses: result.unmatchedLineIds.filter(
+        (id) => (expenseById.get(id)?.amount_eur ?? 0) > 0 && expenseStatus.get(id) === "pending",
+      ).length,
       personalSuggestions: personalSuggestions.length,
       batchesWithoutTransfer: batches.filter((b) => !b.transfer && !b.beforeHistory && b.linesTotal > 0).length,
     },
@@ -517,6 +594,11 @@ export function useLedgerActions() {
         })),
       );
       fail(linkError);
+    }),
+    /** A transfer that is not an expense reimbursement (advance top-up…). */
+    ignoreTransfer: run(async (id: string, ignored: boolean) => {
+      const { error } = await supabase.from("jetfly_transfers").update({ ignored }).eq("id", id);
+      fail(error);
     }),
     deleteExpense: run(async (id: string) => {
       const { error } = await supabase.from("expenses").delete().eq("id", id);

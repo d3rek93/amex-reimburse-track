@@ -78,8 +78,12 @@ function Content({ ledger }: { ledger: Ledger }) {
   }
 
   const s = (n: number) => (n > 1 ? "s" : "");
+  const awaiting = ledger.expenses.reduce(
+    (a, e) => (ledger.expenseStatus.get(e.id) === "reimbursed" ? { n: a.n + 1, total: a.total + e.amount_eur } : a),
+    { n: 0, total: 0 },
+  );
   const tasks = [
-    { n: counts.toReview, label: "à vérifier", hint: "Propositions et écarts à valider", to: "/reconcile" },
+    { n: counts.toReview, label: "à vérifier", hint: "Propositions, écarts et remboursements à justifier", to: "/reconcile" },
     { n: counts.missingNotes, label: `note${s(counts.missingNotes)} sans dépense`, hint: "Payées par Jetfly, introuvables sur tes relevés", to: "/reconcile?tab=unmatched" },
     { n: counts.unclaimedExpenses, label: `dépense${s(counts.unclaimedExpenses)} sans note`, hint: "Pas encore déclarées, ou perso", to: "/reconcile?tab=unmatched" },
     { n: counts.batchesWithoutTransfer, label: `paiement${s(counts.batchesWithoutTransfer)} Jetfly sans virement`, hint: "Annoncés dans un relevé, pas vus sur Boursobank", to: "/notes" },
@@ -92,8 +96,14 @@ function Content({ ledger }: { ledger: Ledger }) {
           {owed > 0.005 ? <>Jetfly te doit {eur(owed)}</> : <>Jetfly ne te doit plus rien</>}
         </p>
         <p className="text-muted-foreground">
-          {advance.owedExpenses.length} dépense{advance.owedExpenses.length > 1 ? "s" : ""} pro pas encore associée
-          {advance.owedExpenses.length > 1 ? "s" : ""} à une note Jetfly.
+          {advance.owedExpenses.length} dépense{advance.owedExpenses.length > 1 ? "s" : ""} pro pas encore remboursée
+          {advance.owedExpenses.length > 1 ? "s" : ""}.
+          {awaiting.n > 0 && (
+            <>
+              {" "}
+              {eur(awaiting.total)} déjà remboursés attendent le prochain relevé Jetfly pour être validés.
+            </>
+          )}
           {advance.snapshot && (
             <>
               {" "}
@@ -131,14 +141,15 @@ function Content({ ledger }: { ledger: Ledger }) {
 
 /** Last three months: what went out for work, and how much of it came back. */
 function MonthSummary({ ledger }: { ledger: Ledger }) {
-  const months = new Map<string, { spent: number; matched: number; pending: number }>();
+  const months = new Map<string, { spent: number; matched: number; received: number; pending: number }>();
   for (const e of ledger.expenses) {
     if (e.is_personal || e.amount_eur <= 0) continue;
     const key = e.date.slice(0, 7);
-    const m = months.get(key) ?? { spent: 0, matched: 0, pending: 0 };
+    const m = months.get(key) ?? { spent: 0, matched: 0, received: 0, pending: 0 };
     const status = ledger.expenseStatus.get(e.id);
     m.spent += e.amount_eur;
-    if (status === "reimbursed" || status === "discrepancy") m.matched += e.amount_eur;
+    if (status === "validated" || status === "discrepancy") m.matched += e.amount_eur;
+    else if (status === "reimbursed" || status === "no_note") m.received += e.amount_eur;
     else if (status === "pending" || status === "to_review") m.pending += e.amount_eur;
     months.set(key, m);
   }
@@ -152,12 +163,13 @@ function MonthSummary({ ledger }: { ledger: Ledger }) {
   return (
     <section>
       <h2 className="text-base font-semibold mb-3">Derniers mois</h2>
-      <table className="w-full max-w-3xl text-sm">
+      <table className="w-full max-w-4xl text-sm">
         <thead className="text-muted-foreground">
           <tr className="border-b">
             <th className="text-left font-normal py-2">Mois</th>
             <th className="text-right font-normal py-2">Dépenses pro</th>
-            <th className="text-right font-normal py-2">Associées à une note</th>
+            <th className="text-right font-normal py-2">Remboursées et validées</th>
+            <th className="text-right font-normal py-2">Remboursées, relevé à venir</th>
             <th className="text-right font-normal py-2">En attente</th>
           </tr>
         </thead>
@@ -167,6 +179,7 @@ function MonthSummary({ ledger }: { ledger: Ledger }) {
               <td className="py-2">{name(key)}</td>
               <td className="py-2 text-right tabular-nums">{eur(m.spent)}</td>
               <td className="py-2 text-right tabular-nums">{eur(m.matched)}</td>
+              <td className="py-2 text-right tabular-nums">{eur(m.received)}</td>
               <td className={cn("py-2 text-right tabular-nums", m.pending > 0.005 && "font-medium")}>{eur(m.pending)}</td>
             </tr>
           ))}

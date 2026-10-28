@@ -100,8 +100,15 @@ function Review({ ledger }: { ledger: Ledger }) {
     return [...byNote.values()];
   }, [s]);
   const personal = expensesOf(ledger, ledger.personalSuggestions);
+  const noNote = ledger.expenses.filter((e) => ledger.expenseStatus.get(e.id) === "no_note");
+  const absent = ledger.transferViews.filter((t) => t.status === "absent" && t.lineIds.length === 0);
+  const toSplit = ledger.transferViews.filter((t) => t.status === "to_split");
+  const transferOf = (expenseId: string) => {
+    const r = ledger.reimbursementOf.get(expenseId);
+    return r?.transferId ? ledger.transferViews.find((t) => t.id === r.transferId) : undefined;
+  };
 
-  if (s.length === 0 && personal.length === 0) {
+  if (s.length === 0 && personal.length === 0 && noNote.length === 0 && absent.length === 0 && toSplit.length === 0) {
     return (
       <p className="text-muted-foreground max-w-xl">
         Rien à vérifier. Les notes et dépenses restantes n'ont aucun candidat : retrouve-les dans « Sans correspondance ».
@@ -114,6 +121,55 @@ function Review({ ledger }: { ledger: Ledger }) {
   return (
     <div className="space-y-10">
       <PickExpenses ledger={ledger} noteIds={picking} onClose={() => setPicking(null)} />
+      {noNote.length > 0 && (
+        <Section
+          title="Remboursées sans note Jetfly"
+          hint="Un virement Jetfly a remboursé ces dépenses, mais aucune note ne leur correspond dans les relevés déjà importés."
+        >
+          <div className="rounded-lg border border-destructive/40 bg-card divide-y">
+            {noNote.map((e) => {
+              const t = transferOf(e.id);
+              return (
+                <div key={e.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-sm">
+                  <span className="w-14 shrink-0 text-muted-foreground tabular-nums">{shortDate(e.date)}</span>
+                  <span className="flex-1 min-w-[12rem] truncate">
+                    {e.description}
+                    <span className="text-muted-foreground"> · {e.source}</span>
+                  </span>
+                  <span className="tabular-nums font-medium">{eur(e.amount_eur)}</span>
+                  <span className="basis-full sm:basis-auto text-muted-foreground">
+                    {t ? `Virement de ${eur(t.amount_eur)} reçu le ${shortDate(t.date)}` : "Virement reçu"}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Retrouve la note correspondante dans « Sans correspondance », ou vérifie auprès du service notes de frais.
+          </p>
+        </Section>
+      )}
+
+      {absent.length > 0 && (
+        <Section
+          title="Virements absents des relevés"
+          hint="Virements Jetfly reçus pendant une période couverte par tes relevés, sans paiement correspondant ni dépense identifiable."
+        >
+          <div className="rounded-lg border border-destructive/40 bg-card divide-y">
+            {absent.map((t) => (
+              <div key={t.id} className="flex flex-wrap items-center gap-3 px-4 py-2.5 text-sm">
+                <span className="w-14 shrink-0 text-muted-foreground tabular-nums">{shortDate(t.date)}</span>
+                <span className="flex-1 min-w-[12rem] truncate">{t.label}</span>
+                <span className="tabular-nums font-medium">{eur(t.amount_eur)}</span>
+                <Button size="sm" variant="ghost" disabled={busy !== null} onClick={() => run(t.id, () => base.ignoreTransfer(t.id, true), "Virement ignoré")}>
+                  Pas un remboursement de frais
+                </Button>
+              </div>
+            ))}
+          </div>
+        </Section>
+      )}
+
       {completions.length > 0 && (
         <Section
           title="Associations à compléter"
@@ -248,6 +304,26 @@ function Review({ ledger }: { ledger: Ledger }) {
               }
             />
           ))}
+        </Section>
+      )}
+
+      {toSplit.length > 0 && (
+        <Section
+          title="Virements reçus, à répartir"
+          hint="Plusieurs combinaisons de dépenses donnent ce montant. Le prochain relevé Jetfly dira lesquelles il rembourse : rien à faire en attendant."
+        >
+          <div className="rounded-lg border bg-card divide-y">
+            {toSplit.map((t) => (
+              <div key={t.id} className="flex flex-wrap items-center gap-3 px-4 py-2.5 text-sm">
+                <span className="w-14 shrink-0 text-muted-foreground tabular-nums">{shortDate(t.date)}</span>
+                <span className="flex-1 min-w-[12rem] truncate">{t.label}</span>
+                <span className="tabular-nums font-medium">{eur(t.amount_eur)}</span>
+                <Button size="sm" variant="ghost" disabled={busy !== null} onClick={() => run(t.id, () => base.ignoreTransfer(t.id, true), "Virement ignoré")}>
+                  Pas un remboursement de frais
+                </Button>
+              </div>
+            ))}
+          </div>
         </Section>
       )}
 

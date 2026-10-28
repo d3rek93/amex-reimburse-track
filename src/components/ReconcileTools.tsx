@@ -58,7 +58,7 @@ export function PickExpenses({
   const free = ledger.expenses.filter((e) => {
     const st = ledger.expenseStatus.get(e.id);
     // Credit notes ("Avoir") are offered too, to net them against a purchase.
-    return e.amount_eur !== 0 && (st === "pending" || st === "to_review" || st === "refund");
+    return e.amount_eur !== 0 && ["pending", "to_review", "refund", "reimbursed", "no_note"].includes(st ?? "");
   });
   const days = (a: string, b: string) => Math.abs(Date.parse(a) - Date.parse(b)) / 86400000;
   const candidates = free
