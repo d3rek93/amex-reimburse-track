@@ -89,6 +89,7 @@ function Review({ ledger }: { ledger: Ledger }) {
   const amountGaps = s.filter((m) => m.type === "mismatch");
   const dateGaps = s.filter((m) => m.type === "date_mismatch");
   const groups = s.filter((m) => m.type === "split" || m.type === "combined");
+  const completions = s.filter((m) => m.type === "complete");
   const choices = useMemo(() => {
     // Same-amount candidates, gathered per note.
     const byNote = new Map<string, Match[]>();
@@ -113,6 +114,38 @@ function Review({ ledger }: { ledger: Ledger }) {
   return (
     <div className="space-y-10">
       <PickExpenses ledger={ledger} noteIds={picking} onClose={() => setPicking(null)} />
+      {completions.length > 0 && (
+        <Section
+          title="Associations à compléter"
+          hint="Une association validée avec un écart, et une dépense ou un avoir du même commerçant qui le comble exactement."
+        >
+          {completions.map((c) => {
+            const m = ledger.matches.find((x) => x.linkId && x.linkId === c.ref) ?? ledger.matchOfNote.get(c.noteIds[0]);
+            if (!m) return null;
+            return (
+              <PairStrip
+                key={key(c)}
+                tone="todo"
+                notes={claimsOf(ledger, m.noteIds)}
+                expenses={expensesOf(ledger, [...m.lineIds, ...c.lineIds])}
+                difference={0}
+                footer={
+                  <>
+                    <span className="text-sm mr-auto">{c.reason}.</span>
+                    <Button size="sm" disabled={busy !== null} onClick={() => run(key(c), () => base.extend(m, c.lineIds, 0), "Association complétée")}>
+                      Ajouter à l'association
+                    </Button>
+                    <Button size="sm" variant="ghost" disabled={busy !== null} onClick={() => run(key(c), () => actions.reject(c))}>
+                      Non
+                    </Button>
+                  </>
+                }
+              />
+            );
+          })}
+        </Section>
+      )}
+
       {amountGaps.length > 0 && (
         <Section
           title="Écarts de montant"

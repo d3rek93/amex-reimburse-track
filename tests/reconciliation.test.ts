@@ -267,3 +267,17 @@ test("a purchase and its credit note match the net amount claimed", () => {
   assert.equal(r.matches[0].reason, "Une note pour un achat et son avoir");
   assert.deepEqual(r.unmatchedLineIds, []);
 });
+
+test("a credit note that closes the gap of a validated association is proposed", () => {
+  const buy = bank("2026-01-26", 96, "SNCF-VOYAGEURS SNCF436 PARIS");
+  const credit = bank("2026-01-27", -30.2, "SNCF-VOYAGEURS SNCF436 PARIS");
+  const r = reconcile({
+    lines: [buy, credit],
+    claimLines: [note("533850", "2026-01-27", "Positionning", "Train", 65.8)],
+    confirmed: [{ noteIds: ["533850"], lineIds: [buy.id], ref: "link-1" }],
+  });
+  const s = r.suggestions.find((x) => x.type === "complete");
+  assert.ok(s, "completion proposed");
+  assert.deepEqual(s!.lineIds, [credit.id]);
+  assert.equal(s!.ref, "link-1");
+});

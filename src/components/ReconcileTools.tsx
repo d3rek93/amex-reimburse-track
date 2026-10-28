@@ -5,7 +5,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { useLedgerActions, type ExpenseRow, type Ledger } from "@/lib/ledger";
+import { useLedgerActions, type ExpenseRow, type Ledger, type MatchView } from "@/lib/ledger";
 import type { Claim } from "@/lib/reconciliation";
 import { categoryLabel, eur, shortDate, signedEur } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -34,8 +34,19 @@ export function useRunner() {
 }
 
 /** Associate a note with expenses picked by hand, when the proposal was wrong. */
-export function PickExpenses({ ledger, noteIds, onClose }: { ledger: Ledger; noteIds: string[] | null; onClose: () => void }) {
-  const { associate } = useLedgerActions();
+export function PickExpenses({
+  ledger,
+  noteIds,
+  onClose,
+  extend,
+}: {
+  ledger: Ledger;
+  noteIds: string[] | null;
+  onClose: () => void;
+  /** Add to this existing association instead of creating a new one. */
+  extend?: MatchView;
+}) {
+  const { associate, extend: extendLink } = useLedgerActions();
   const { busy, run } = useRunner();
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -54,7 +65,8 @@ export function PickExpenses({ ledger, noteIds, onClose }: { ledger: Ledger; not
     .filter((e) => !q || e.description.toLowerCase().includes(q) || e.amount_eur.toFixed(2).includes(q))
     .sort((a, b) => Math.abs(a.amount_eur - target) - Math.abs(b.amount_eur - target) || days(a.date, date) - days(b.date, date))
     .slice(0, 40);
-  const total = [...selected].reduce((s, id) => s + (ledger.expenseById.get(id)?.amount_eur ?? 0), 0);
+  const already = extend ? extend.lineIds.reduce((s, id) => s + (ledger.expenseById.get(id)?.amount_eur ?? 0), 0) : 0;
+  const total = already + [...selected].reduce((s, id) => s + (ledger.expenseById.get(id)?.amount_eur ?? 0), 0);
   const difference = Math.round((total - target) * 100) / 100;
 
   const close = () => {
@@ -67,7 +79,7 @@ export function PickExpenses({ ledger, noteIds, onClose }: { ledger: Ledger; not
     <Dialog open={noteIds !== null} onOpenChange={(o) => !o && close()}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Choisir la dépense</DialogTitle>
+          <DialogTitle>{extend ? "Ajouter une dépense à l'association" : "Choisir la dépense"}</DialogTitle>
           <DialogDescription>
             {notes.map((n) => `${categoryLabel(n.category, n.subcategory)}, note ${n.noteId}, ${shortDate(n.date)} : ${eur(n.amount)}`).join(" ; ")}
           </DialogDescription>
@@ -112,7 +124,14 @@ export function PickExpenses({ ledger, noteIds, onClose }: { ledger: Ledger; not
             <Button
               disabled={selected.size === 0 || busy !== null || !noteIds}
               onClick={() =>
-                run("pick", () => associate(noteIds!, [...selected], difference, Math.abs(difference) >= 0.005 ? "Écart accepté à l'association" : undefined), "Associées").then(close)
+                run(
+                  "pick",
+                  () =>
+                    extend
+                      ? extendLink(extend, [...selected], difference)
+                      : associate(noteIds!, [...selected], difference, Math.abs(difference) >= 0.005 ? "Écart accepté à l'association" : undefined),
+                  "Associées",
+                ).then(close)
               }
             >
               {Math.abs(difference) >= 0.005 && selected.size > 0 ? `Associer avec un écart de ${eur(Math.abs(difference))}` : "Associer"}

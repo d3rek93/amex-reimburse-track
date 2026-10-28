@@ -73,7 +73,7 @@ export interface Claim {
   cancelled: boolean;
 }
 
-export type MatchType = "confirmed" | "exact" | "split" | "combined" | "mismatch" | "date_mismatch";
+export type MatchType = "confirmed" | "exact" | "split" | "combined" | "mismatch" | "date_mismatch" | "complete";
 
 export interface Match {
   type: MatchType;
@@ -587,7 +587,38 @@ export function reconcile(input: ReconcileInput, options: ReconcileOptions = {})
     });
   }
 
-  // 7. Each Jetfly payment batch ↔ the transfer it produced.
+  // 7. A validated association with a gap that a free credit note (or purchase) at
+  //    the same merchant closes exactly: offer to add it to the association.
+  for (const m of matches) {
+    if (m.type !== "confirmed" || Math.abs(m.difference) < EPS) continue;
+    const keys = new Set(m.lineIds.map((id) => merchantKey(lineById.get(id)?.label ?? "")).filter(Boolean));
+    const dates = m.lineIds.map((id) => lineById.get(id)?.date).filter(Boolean) as string[];
+    const candidates = [...openLines]
+      .map((id) => lineById.get(id)!)
+      .filter(
+        (l) =>
+          !suggestedNow.has(l.id) &&
+          sameAmount(l.amount, -m.difference) &&
+          keys.has(merchantKey(l.label)) &&
+          dates.some((d) => daysBetween(d, l.date) <= 60) &&
+          m.noteIds.every((n) => allowed(n, l.id)),
+      );
+    if (candidates.length !== 1) continue;
+    const l = candidates[0];
+    suggestedNow.add(l.id);
+    suggestions.push({
+      type: "complete",
+      noteIds: m.noteIds,
+      lineIds: [l.id],
+      difference: 0,
+      confidence: "medium",
+      auto: false,
+      reason: l.amount < 0 ? "Cet avoir comble l'écart de l'association" : "Cette dépense comble l'écart de l'association",
+      ref: m.ref,
+    });
+  }
+
+  // 8. Each Jetfly payment batch ↔ the transfer it produced.
   const batchMap = new Map<string, BatchStatus>();
   for (const l of input.claimLines) {
     const b = batchMap.get(l.batchRef) ?? { ref: l.batchRef, paymentDate: l.paymentDate, total: 0, transferId: null };

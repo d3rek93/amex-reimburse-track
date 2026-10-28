@@ -435,6 +435,29 @@ export function useLedgerActions() {
         .upsert(rows, { onConflict: "user_id,note_id,expense_id", ignoreDuplicates: true });
       fail(error);
     }),
+    /**
+     * Add expenses (a credit note, a forgotten part) to an existing association.
+     * An automatic match becomes a validated one in the process.
+     */
+    extend: run(async (m: MatchView, addIds: string[], difference: number) => {
+      const expenseIds = [...new Set([...m.lineIds, ...addIds])];
+      const diff = Math.round(difference * 100) / 100;
+      if (m.linkId) {
+        const { error } = await supabase
+          .from("reconciliation_links")
+          .update({ expense_ids: expenseIds, difference: diff })
+          .eq("id", m.linkId);
+        fail(error);
+        return;
+      }
+      const { error } = await supabase.from("reconciliation_links").insert({
+        user_id: await userId(),
+        note_ids: m.noteIds,
+        expense_ids: expenseIds,
+        difference: diff,
+      });
+      fail(error);
+    }),
     /** Manual association from the "unmatched" lists. */
     associate: run(async (noteIds: string[], expenseIds: string[], difference: number, comment?: string) => {
       const { error } = await supabase.from("reconciliation_links").insert({

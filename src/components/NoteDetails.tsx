@@ -14,7 +14,7 @@ import { categoryLabel, eur, longDate, shortDate } from "@/lib/format";
 export function NoteDetails({ ledger, noteId, onClose }: { ledger: Ledger; noteId: string | null; onClose: () => void }) {
   const actions = useLedgerActions();
   const { busy, run } = useRunner();
-  const [mode, setMode] = useState<"details" | "pick" | "pay">("details");
+  const [mode, setMode] = useState<"details" | "pick" | "pay" | "extend">("details");
   const note = noteId ? ledger.claimById.get(noteId) : undefined;
 
   const close = () => {
@@ -24,6 +24,8 @@ export function NoteDetails({ ledger, noteId, onClose }: { ledger: Ledger; noteI
 
   if (!noteId || !note) return null;
   if (mode === "pick") return <PickExpenses ledger={ledger} noteIds={[noteId]} onClose={close} />;
+  const current = ledger.matchOfNote.get(noteId);
+  if (mode === "extend" && current) return <PickExpenses ledger={ledger} noteIds={current.noteIds} extend={current} onClose={close} />;
   if (mode === "pay") return <PayOtherwise open notes={[note]} onClose={close} />;
 
   const status = ledger.noteStatus.get(noteId)!;
@@ -83,6 +85,9 @@ export function NoteDetails({ ledger, noteId, onClose }: { ledger: Ledger; noteI
                   <span className="text-xs text-muted-foreground mr-auto">
                     {match.auto ? "Associée automatiquement" : match.comment?.startsWith("Payée") ? match.comment : "Validée par toi"}
                   </span>
+                  <Button size="sm" variant="ghost" className="h-7" onClick={() => setMode("extend")}>
+                    Ajouter une dépense…
+                  </Button>
                   <Button size="sm" variant="ghost" className="h-7" disabled={busy !== null} onClick={() => run("unlink", () => actions.unlink(match), "Dissociées")}>
                     Dissocier
                   </Button>
@@ -100,13 +105,23 @@ export function NoteDetails({ ledger, noteId, onClose }: { ledger: Ledger; noteI
                 key={`${m.type}:${m.lineIds.join(",")}`}
                 tone={m.type === "mismatch" || m.type === "date_mismatch" ? "warn" : "todo"}
                 notes={claimsOf(ledger, m.noteIds)}
-                expenses={expensesOf(ledger, m.lineIds)}
+                expenses={expensesOf(ledger, m.type === "complete" && match ? [...match.lineIds, ...m.lineIds] : m.lineIds)}
                 difference={m.difference}
                 footer={
                   <>
                     <span className="text-sm mr-auto">{m.reason}</span>
-                    <Button size="sm" disabled={busy !== null} onClick={() => run(m.lineIds.join(","), () => actions.confirm(m), "Associées")}>
-                      {m.type === "mismatch" ? "Accepter l'écart" : "Associer"}
+                    <Button
+                      size="sm"
+                      disabled={busy !== null}
+                      onClick={() =>
+                        run(
+                          m.lineIds.join(","),
+                          () => (m.type === "complete" && match ? actions.extend(match, m.lineIds, 0) : actions.confirm(m)),
+                          "Associées",
+                        )
+                      }
+                    >
+                      {m.type === "mismatch" ? "Accepter l'écart" : m.type === "complete" ? "Ajouter à l'association" : "Associer"}
                     </Button>
                     <Button
                       size="sm"
