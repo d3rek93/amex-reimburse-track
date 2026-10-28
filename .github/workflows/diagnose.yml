@@ -31,3 +31,19 @@ jobs:
           note "rejections" "select count(*) from reconciliation_rejections"
           note "links" "select count(*) from reconciliation_links"
           note "claim lines / batches / transfers" "select (select count(*) from claim_lines) as lines, (select count(*) from claim_batches) as batches, (select count(*) from jetfly_transfers) as transfers"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Engine statistics
+        run: |
+          ref=$(sed -n 's/^project_id = "\(.*\)"/\1/p' supabase/config.toml)
+          mkdir -p /tmp/data
+          # Exported to the runner's disk only; the script prints statistics, never rows.
+          for t in expenses claim_lines reconciliation_links reconciliation_rejections jetfly_transfers; do
+            curl -s -X POST "https://api.supabase.com/v1/projects/$ref/database/query" \
+              -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" -H "Content-Type: application/json" \
+              -d "$(jq -n --arg q "select coalesce(json_agg(t), '[]'::json) as j from public.$t t" '{query: $q}')" \
+              | jq '.[0].j' > /tmp/data/$t.json
+          done
+          node --experimental-strip-types --no-warnings tests/diagnose/engine-stats.ts /tmp/data
+          rm -rf /tmp/data
