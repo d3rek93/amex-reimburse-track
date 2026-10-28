@@ -63,7 +63,7 @@ for (const [device, viewport] of [["desktop", { width: 1280, height: 900 }], ["m
       }
     }
     if (name === "notes") {
-      const first = page.locator("main button[aria-expanded]").first();
+      const first = page.locator("main button[aria-expanded]").nth(1);
       if (await first.count()) await first.click();
     }
     await page.screenshot({ path: `${out}/${device}-${name}.png`, fullPage: true });
@@ -74,6 +74,15 @@ for (const [device, viewport] of [["desktop", { width: 1280, height: 900 }], ["m
         await pay.click();
         await page.waitForTimeout(300);
         await page.screenshot({ path: `${out}/${device}-reconcile-pay.png` });
+        await page.keyboard.press("Escape");
+      }
+    }
+    if (name === "notes" && device === "desktop") {
+      const row = page.locator('tr[role="button"]').first();
+      if (await row.count()) {
+        await row.click();
+        await page.waitForTimeout(300);
+        await page.screenshot({ path: `${out}/${device}-note-details.png` });
         await page.keyboard.press("Escape");
       }
     }

@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Loader2, Search } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { NoteStatusLabel } from "@/components/StatusLabel";
+import { NoteDetails } from "@/components/NoteDetails";
 import { Input } from "@/components/ui/input";
 import { useLedger, type BatchView, type Ledger } from "@/lib/ledger";
 import { categoryLabel, dayDate, eur, monthLabel, shortDate } from "@/lib/format";
@@ -10,6 +11,7 @@ import { cn } from "@/lib/utils";
 export default function NotesPage() {
   const { ledger, isLoading, error } = useLedger();
   const [query, setQuery] = useState("");
+  const [openNote, setOpenNote] = useState<string | null>(null);
 
   const months = useMemo(() => {
     if (!ledger) return [];
@@ -48,15 +50,16 @@ export default function NotesPage() {
             <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="N° de note, montant, catégorie" className="pl-9" aria-label="Chercher" />
           </div>
           {months.map(([key, batches]) => (
-            <Month key={key} label={monthLabel(`${key}-15`)} batches={batches} ledger={ledger} />
+            <Month key={key} label={monthLabel(`${key}-15`)} batches={batches} ledger={ledger} onOpen={setOpenNote} />
           ))}
+          <NoteDetails ledger={ledger} noteId={openNote} onClose={() => setOpenNote(null)} />
         </div>
       )}
     </AppLayout>
   );
 }
 
-function Month({ label, batches, ledger }: { label: string; batches: BatchView[]; ledger: Ledger }) {
+function Month({ label, batches, ledger, onOpen }: { label: string; batches: BatchView[]; ledger: Ledger; onOpen: (noteId: string) => void }) {
   const total = batches.reduce((s, b) => s + b.linesTotal, 0);
   const received = batches.filter((b) => b.transfer).reduce((s, b) => s + b.linesTotal, 0);
   return (
@@ -69,14 +72,15 @@ function Month({ label, batches, ledger }: { label: string; batches: BatchView[]
       </div>
       <div className="rounded-lg border bg-card divide-y">
         {batches.map((b) => (
-          <Batch key={b.ref} batch={b} ledger={ledger} />
+          <Batch key={b.ref} batch={b} ledger={ledger} onOpen={onOpen} />
         ))}
       </div>
     </section>
   );
 }
 
-function Batch({ batch, ledger }: { batch: BatchView; ledger: Ledger }) {
+function Batch({ batch, ledger, onOpen }: { batch: BatchView; ledger: Ledger; onOpen: (noteId: string) => void }) {
+  // Payments with something to handle open by default.
   const [open, setOpen] = useState(false);
   const mismatch = batch.declaredTotal !== null && Math.abs(batch.declaredTotal - batch.linesTotal) >= 0.005;
   const notes = batch.noteIds.map((n) => ledger.claimById.get(n)).filter(Boolean);
@@ -118,14 +122,30 @@ function Batch({ batch, ledger }: { batch: BatchView; ledger: Ledger }) {
             <tbody className="divide-y">
               {notes.map((c) =>
                 c ? (
-                  <tr key={c.noteId}>
-                    <td className="py-1.5 pr-3 w-20 tabular-nums text-muted-foreground">{shortDate(c.date)}</td>
+                  <tr
+                    key={c.noteId}
+                    tabIndex={0}
+                    role="button"
+                    aria-label={`Ouvrir la note ${c.noteId}`}
+                    onClick={() => onOpen(c.noteId)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        onOpen(c.noteId);
+                      }
+                    }}
+                    className={cn(
+                      "cursor-pointer hover:bg-muted/50 focus-visible:bg-muted/50 outline-none",
+                      ledger.noteStatus.get(c.noteId) === "to_review" && "bg-primary/5",
+                    )}
+                  >
+                    <td className="py-1.5 pl-2 pr-3 w-20 tabular-nums text-muted-foreground">{shortDate(c.date)}</td>
                     <td className="py-1.5 pr-3 tabular-nums text-muted-foreground w-20">{c.noteId}</td>
                     <td className="py-1.5 pr-3">{categoryLabel(c.category, c.subcategory)}</td>
                     <td className="py-1.5 pr-3">
                       <NoteStatusLabel status={ledger.noteStatus.get(c.noteId)!} />
                     </td>
-                    <td className="py-1.5 text-right tabular-nums">
+                    <td className="py-1.5 pr-2 text-right tabular-nums">
                       {c.lines
                         .filter((l) => l.batchRef === batch.ref)
                         .map((l) => eur(l.amount))

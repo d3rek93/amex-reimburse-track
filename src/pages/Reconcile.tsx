@@ -1,16 +1,15 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Check, Loader2, Search } from "lucide-react";
+import { Loader2, Search } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { PairStrip } from "@/components/PairStrip";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { useLedger, useLedgerActions, type ExpenseRow, type Ledger, type MatchView } from "@/lib/ledger";
-import type { Claim, Match } from "@/lib/reconciliation";
+import { PayOtherwise, PickExpenses, SelectableRow, claimsOf, expensesOf, useRunner } from "@/components/ReconcileTools";
+import { useLedger, useLedgerActions, type Ledger, type MatchView } from "@/lib/ledger";
+import type { Match } from "@/lib/reconciliation";
 import { categoryLabel, eur, shortDate, signedEur } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -53,26 +52,6 @@ export default function Reconcile() {
 
 // ------------------------------------------------------------- helpers
 
-const claimsOf = (l: Ledger, ids: string[]) => ids.map((n) => l.claimById.get(n)).filter(Boolean) as Claim[];
-const expensesOf = (l: Ledger, ids: string[]) => ids.map((id) => l.expenseById.get(id)).filter(Boolean) as ExpenseRow[];
-
-/** Runs an action with a busy flag and a toast on failure. */
-function useRunner() {
-  const { toast } = useToast();
-  const [busy, setBusy] = useState<string | null>(null);
-  const run = async (key: string, fn: () => Promise<unknown>, done?: string) => {
-    setBusy(key);
-    try {
-      await fn();
-      if (done) toast({ title: done });
-    } catch (e) {
-      toast({ title: "Action impossible", description: (e as Error).message, variant: "destructive" });
-    } finally {
-      setBusy(null);
-    }
-  };
-  return { busy, run };
-}
 
 function Section({ title, hint, children }: { title: string; hint: string; children: ReactNode }) {
   return (
@@ -334,96 +313,6 @@ function Choice({
   );
 }
 
-/** Associate a note with expenses picked by hand, when the proposal was wrong. */
-function PickExpenses({ ledger, noteIds, onClose }: { ledger: Ledger; noteIds: string[] | null; onClose: () => void }) {
-  const { associate } = useLedgerActions();
-  const { busy, run } = useRunner();
-  const [query, setQuery] = useState("");
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const notes = noteIds ? claimsOf(ledger, noteIds) : [];
-  const target = notes.reduce((s, c) => s + c.amount, 0);
-  const date = notes[0]?.date ?? "";
-
-  const q = query.trim().toLowerCase().replace(",", ".");
-  const free = ledger.expenses.filter((e) => {
-    const st = ledger.expenseStatus.get(e.id);
-    return e.amount_eur > 0 && (st === "pending" || st === "to_review");
-  });
-  const days = (a: string, b: string) => Math.abs(Date.parse(a) - Date.parse(b)) / 86400000;
-  const candidates = free
-    .filter((e) => !q || e.description.toLowerCase().includes(q) || e.amount_eur.toFixed(2).includes(q))
-    .sort((a, b) => Math.abs(a.amount_eur - target) - Math.abs(b.amount_eur - target) || days(a.date, date) - days(b.date, date))
-    .slice(0, 40);
-  const total = [...selected].reduce((s, id) => s + (ledger.expenseById.get(id)?.amount_eur ?? 0), 0);
-  const difference = Math.round((total - target) * 100) / 100;
-
-  const close = () => {
-    setSelected(new Set());
-    setQuery("");
-    onClose();
-  };
-
-  return (
-    <Dialog open={noteIds !== null} onOpenChange={(o) => !o && close()}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Choisir la dépense</DialogTitle>
-          <DialogDescription>
-            {notes.map((n) => `${categoryLabel(n.category, n.subcategory)}, note ${n.noteId}, ${shortDate(n.date)} : ${eur(n.amount)}`).join(" ; ")}
-          </DialogDescription>
-        </DialogHeader>
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" aria-hidden />
-          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Libellé ou montant" className="pl-9" aria-label="Chercher une dépense" />
-        </div>
-        <p className="text-xs text-muted-foreground">Dépenses encore libres, de la plus proche en montant à la plus éloignée.</p>
-        <div className="rounded-lg border divide-y max-h-[50vh] overflow-y-auto">
-          {candidates.length === 0 ? (
-            <p className="px-4 py-3 text-sm text-muted-foreground">Aucune dépense libre ne correspond.</p>
-          ) : (
-            candidates.map((e) => (
-              <SelectableRow
-                key={e.id}
-                checked={selected.has(e.id)}
-                onToggle={() => {
-                  const next = new Set(selected);
-                  if (next.has(e.id)) next.delete(e.id);
-                  else next.add(e.id);
-                  setSelected(next);
-                }}
-                date={e.date}
-                label={
-                  <>
-                    <span>{e.description}</span>
-                    <span className="text-muted-foreground"> · {e.source}</span>
-                  </>
-                }
-                amount={e.amount_eur}
-              />
-            ))
-          )}
-        </div>
-        <DialogFooter className="items-center gap-2 sm:justify-between">
-          <span className={cn("text-sm tabular-nums", selected.size === 0 ? "text-muted-foreground" : Math.abs(difference) >= 0.005 ? "text-warning" : "text-success")}>
-            {selected.size === 0 ? "Aucune dépense choisie" : Math.abs(difference) >= 0.005 ? `Écart ${signedEur(difference)}` : "Montants identiques"}
-          </span>
-          <div className="flex gap-2">
-            <Button variant="ghost" onClick={close}>Annuler</Button>
-            <Button
-              disabled={selected.size === 0 || busy !== null || !noteIds}
-              onClick={() =>
-                run("pick", () => associate(noteIds!, [...selected], difference, Math.abs(difference) >= 0.005 ? "Écart accepté à l'association" : undefined), "Associées").then(close)
-              }
-            >
-              {Math.abs(difference) >= 0.005 && selected.size > 0 ? `Associer avec un écart de ${eur(Math.abs(difference))}` : "Associer"}
-            </Button>
-          </div>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 // ----------------------------------------------------------- unmatched
 
 function Unmatched({ ledger }: { ledger: Ledger }) {
@@ -585,65 +474,6 @@ function Unmatched({ ledger }: { ledger: Ledger }) {
   );
 }
 
-/** Notes settled with another card or in cash. */
-function PayOtherwise({ open, notes, onClose }: { open: boolean; notes: Claim[]; onClose: (done: boolean) => void }) {
-  const { payOtherwise } = useLedgerActions();
-  const { busy, run } = useRunner();
-  const [method, setMethod] = useState<"card" | "cash">("card");
-  const [comment, setComment] = useState("");
-  const total = notes.reduce((s, n) => s + n.amount, 0);
-  return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose(false)}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>
-            {notes.length > 1 ? `${notes.length} notes payées autrement` : "Note payée autrement"}
-          </DialogTitle>
-          <DialogDescription>
-            {notes.length === 1
-              ? `${categoryLabel(notes[0].category, notes[0].subcategory)}, note ${notes[0].noteId}, ${shortDate(notes[0].date)} : ${eur(notes[0].amount)}`
-              : `Total ${eur(total)}`}
-            . Elle{notes.length > 1 ? "s seront associées" : " sera associée"} à une dépense manuelle, hors compte pro.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="grid gap-3">
-          <div className="flex gap-2" role="radiogroup" aria-label="Moyen de paiement">
-            {([["card", "Autre carte"], ["cash", "Espèces"]] as const).map(([value, label]) => (
-              <Button
-                key={value}
-                type="button"
-                role="radio"
-                aria-checked={method === value}
-                variant="outline"
-                className={cn(method === value && "border-primary bg-primary/5 text-primary ring-1 ring-primary hover:bg-primary/10 hover:text-primary")}
-                onClick={() => setMethod(value)}
-              >
-                {method === value && <Check className="h-4 w-4 mr-1.5" aria-hidden />}
-                {label}
-              </Button>
-            ))}
-          </div>
-          <Input value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Précision (facultatif) : carte perso, Visa Revolut…" aria-label="Précision" />
-        </div>
-        <DialogFooter>
-          <Button variant="ghost" onClick={() => onClose(false)}>Annuler</Button>
-          <Button
-            disabled={busy !== null || notes.length === 0}
-            onClick={() =>
-              run("pay", () => payOtherwise(notes, method, comment.trim() || undefined), method === "cash" ? "Marquée payée en espèces" : "Marquée payée avec une autre carte").then(() => {
-                setComment("");
-                onClose(true);
-              })
-            }
-          >
-            Confirmer
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 /** Notes older than the bank data are hidden; offer to fetch a longer history. */
 function HistoryNotice({ ledger, hidden }: { ledger: Ledger; hidden: number }) {
   const { refresh } = useLedgerActions();
@@ -684,29 +514,6 @@ function Column({ title, empty, children }: { title: string; empty: string; chil
         <div className="rounded-lg border bg-card divide-y max-h-[65vh] overflow-y-auto">{children}</div>
       )}
     </section>
-  );
-}
-
-function SelectableRow({
-  checked,
-  onToggle,
-  date,
-  label,
-  amount,
-}: {
-  checked: boolean;
-  onToggle: () => void;
-  date: string;
-  label: ReactNode;
-  amount: number;
-}) {
-  return (
-    <label className={cn("flex items-center gap-3 px-4 py-2 text-sm cursor-pointer hover:bg-muted/50", checked && "bg-primary/5")}>
-      <Checkbox checked={checked} onCheckedChange={onToggle} />
-      <span className="w-14 shrink-0 text-muted-foreground tabular-nums">{shortDate(date)}</span>
-      <span className="flex-1 min-w-0 truncate">{label}</span>
-      <span className="tabular-nums font-medium">{eur(amount)}</span>
-    </label>
   );
 }
 
