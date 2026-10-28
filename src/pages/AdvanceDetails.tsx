@@ -109,7 +109,7 @@ function Subtotal({ label, value, strong = false }: { label: string; value: numb
     <tr className={cn("border-t-2 border-foreground/20", strong && "text-base")}>
       <td className="py-2.5 pr-3 font-semibold">= {label}</td>
       <td className={cn("py-2.5 text-right tabular-nums font-semibold whitespace-nowrap", strong && (value >= 0 ? "text-success" : "text-destructive"))}>
-        {value < 0 ? "− " : ""}
+        {value < 0 && !strong ? "− " : ""}
         {eur(Math.abs(value))}
       </td>
     </tr>
