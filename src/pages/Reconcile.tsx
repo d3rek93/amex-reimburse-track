@@ -432,6 +432,7 @@ function Unmatched({ ledger }: { ledger: Ledger }) {
   const [query, setQuery] = useState("");
   const [notesSel, setNotesSel] = useState<Set<string>>(new Set());
   const [expSel, setExpSel] = useState<Set<string>>(new Set());
+  const [paying, setPaying] = useState(false);
 
   const q = query.trim().toLowerCase().replace(",", ".");
   const matches = (text: string, amount: number) =>
@@ -463,7 +464,8 @@ function Unmatched({ ledger }: { ledger: Ledger }) {
     <div className="space-y-4 pb-24">
       <p className="text-sm text-muted-foreground max-w-3xl">
         Ce qui n'a trouvé aucune correspondance. Coche une ou plusieurs notes et la ou les dépenses qui vont avec, puis
-        associe-les. Une dépense sans note peut aussi être perso.
+        associe-les. Une note réglée en espèces ou avec une autre carte : coche-la seule, puis « Payée autrement ». Une
+        dépense sans note peut aussi être perso.
       </p>
       {hidden > 0 && <HistoryNotice ledger={ledger} hidden={hidden} />}
       <div className="relative max-w-sm">
@@ -513,6 +515,14 @@ function Unmatched({ ledger }: { ledger: Ledger }) {
         </Column>
       </div>
 
+      <PayOtherwise
+        open={paying}
+        notes={claimsOf(ledger, [...notesSel])}
+        onClose={(done) => {
+          setPaying(false);
+          if (done) clear();
+        }}
+      />
       {(notesSel.size > 0 || expSel.size > 0) && (
         <div className="fixed bottom-0 inset-x-0 z-30 border-t bg-card/95 backdrop-blur">
           <div className="mx-auto max-w-6xl px-4 py-3 flex flex-wrap items-center gap-3 text-sm">
@@ -531,6 +541,11 @@ function Unmatched({ ledger }: { ledger: Ledger }) {
               <Button variant="ghost" size="sm" onClick={clear}>
                 Désélectionner
               </Button>
+              {notesSel.size > 0 && expSel.size === 0 && (
+                <Button variant="outline" size="sm" disabled={busy !== null} onClick={() => setPaying(true)}>
+                  Payée autrement…
+                </Button>
+              )}
               {expSel.size > 0 && notesSel.size === 0 && (
                 <Button
                   variant="outline"
@@ -567,6 +582,56 @@ function Unmatched({ ledger }: { ledger: Ledger }) {
         </div>
       )}
     </div>
+  );
+}
+
+/** Notes settled with another card or in cash. */
+function PayOtherwise({ open, notes, onClose }: { open: boolean; notes: Claim[]; onClose: (done: boolean) => void }) {
+  const { payOtherwise } = useLedgerActions();
+  const { busy, run } = useRunner();
+  const [method, setMethod] = useState<"card" | "cash">("card");
+  const [comment, setComment] = useState("");
+  const total = notes.reduce((s, n) => s + n.amount, 0);
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose(false)}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>
+            {notes.length > 1 ? `${notes.length} notes payées autrement` : "Note payée autrement"}
+          </DialogTitle>
+          <DialogDescription>
+            {notes.length === 1
+              ? `${categoryLabel(notes[0].category, notes[0].subcategory)}, note ${notes[0].noteId}, ${shortDate(notes[0].date)} : ${eur(notes[0].amount)}`
+              : `Total ${eur(total)}`}
+            . Elle{notes.length > 1 ? "s seront associées" : " sera associée"} à une dépense manuelle, hors compte pro.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-3">
+          <div className="flex gap-2" role="radiogroup" aria-label="Moyen de paiement">
+            {([["card", "Autre carte"], ["cash", "Espèces"]] as const).map(([value, label]) => (
+              <Button key={value} type="button" role="radio" aria-checked={method === value} variant={method === value ? "secondary" : "outline"} onClick={() => setMethod(value)}>
+                {label}
+              </Button>
+            ))}
+          </div>
+          <Input value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Précision (facultatif) : carte perso, Visa Revolut…" aria-label="Précision" />
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => onClose(false)}>Annuler</Button>
+          <Button
+            disabled={busy !== null || notes.length === 0}
+            onClick={() =>
+              run("pay", () => payOtherwise(notes, method, comment.trim() || undefined), method === "cash" ? "Marquée payée en espèces" : "Marquée payée avec une autre carte").then(() => {
+                setComment("");
+                onClose(true);
+              })
+            }
+          >
+            Confirmer
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -681,7 +746,13 @@ function Matched({ ledger }: { ledger: Ledger }) {
           footer={
             <>
               <span className="text-xs text-muted-foreground mr-auto" title={m.reason}>
-                {m.auto ? "Automatique" : Math.abs(m.difference) >= 0.005 ? "Validée par toi, écart accepté" : "Validée par toi"}
+                {m.auto
+                  ? "Automatique"
+                  : m.comment?.startsWith("Payée")
+                    ? m.comment
+                    : Math.abs(m.difference) >= 0.005
+                      ? "Validée par toi, écart accepté"
+                      : "Validée par toi"}
               </span>
               <Button size="sm" variant="ghost" className="h-7" disabled={busy !== null} onClick={() => run(m.linkId ?? m.lineIds.join(","), () => actions.unlink(m), "Dissociées")}>
                 Dissocier

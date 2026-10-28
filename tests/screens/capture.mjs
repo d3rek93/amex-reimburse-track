@@ -67,6 +67,16 @@ for (const [device, viewport] of [["desktop", { width: 1280, height: 900 }], ["m
       if (await first.count()) await first.click();
     }
     await page.screenshot({ path: `${out}/${device}-${name}.png`, fullPage: true });
+    if (name === "reconcile-unmatched" && device === "desktop") {
+      await page.getByRole("checkbox").last().click();
+      const pay = page.getByRole("button", { name: "Payée autrement…" });
+      if (await pay.count()) {
+        await pay.click();
+        await page.waitForTimeout(300);
+        await page.screenshot({ path: `${out}/${device}-reconcile-pay.png` });
+        await page.keyboard.press("Escape");
+      }
+    }
     if (name === "reconcile-review" && device === "desktop") {
       const other = page.getByRole("button", { name: "Autre dépense…" }).first();
       if (await other.count()) {

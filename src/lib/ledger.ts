@@ -75,6 +75,8 @@ export type NoteStatus = "matched" | "discrepancy" | "to_review" | "missing" | "
 /** A match as shown in the UI: confirmed ones carry the link id they come from. */
 export interface MatchView extends Match {
   linkId?: string;
+  /** The user's note on the link, e.g. "Payée en espèces". */
+  comment?: string | null;
 }
 
 export interface Ledger {
@@ -222,7 +224,7 @@ export function buildLedger(raw: RawData): Ledger {
   const linkById = new Map(raw.links.map((l) => [l.id, l]));
   const matches: MatchView[] = result.matches.map((m) => {
     const link = m.ref ? linkById.get(m.ref) : undefined;
-    return link ? { ...m, linkId: link.id, difference: link.difference } : m;
+    return link ? { ...m, linkId: link.id, difference: link.difference, comment: link.comment } : m;
   });
 
   const claimById = new Map(result.claims.map((c) => [c.noteId, c]));
@@ -417,6 +419,13 @@ export function useLedgerActions() {
       if (m.linkId) {
         const { error } = await supabase.from("reconciliation_links").delete().eq("id", m.linkId);
         fail(error);
+        // An expense created by "paid another way" has no meaning without its note.
+        const { error: cleanup } = await supabase
+          .from("expenses")
+          .delete()
+          .in("id", m.lineIds)
+          .like("bank_transaction_id", "manual:other:%");
+        fail(cleanup);
         return;
       }
       const uid = await userId();
@@ -450,6 +459,41 @@ export function useLedgerActions() {
         bank_transaction_id: `manual:${crypto.randomUUID()}`,
       });
       fail(error);
+    }),
+    /**
+     * Notes paid with another card or in cash: each gets a manual expense of the
+     * same amount, linked to it. Not taken from the pro account, so the advance
+     * is unaffected.
+     */
+    payOtherwise: run(async (notes: Claim[], method: "card" | "cash", comment?: string) => {
+      if (notes.length === 0) return;
+      const uid = await userId();
+      const label = method === "cash" ? "Payée en espèces" : "Payée avec une autre carte";
+      const { data, error } = await supabase
+        .from("expenses")
+        .insert(
+          notes.map((n) => ({
+            user_id: uid,
+            date: n.date,
+            description: `${label}${comment ? ` – ${comment}` : ""}`,
+            amount_eur: n.amount,
+            source: "Manuel",
+            bank_transaction_id: `manual:other:${method}:${n.noteId}:${crypto.randomUUID()}`,
+          })),
+        )
+        .select("id, bank_transaction_id");
+      fail(error);
+      const byNote = new Map((data ?? []).map((e) => [String(e.bank_transaction_id).split(":")[3], e.id]));
+      const { error: linkError } = await supabase.from("reconciliation_links").insert(
+        notes.map((n) => ({
+          user_id: uid,
+          note_ids: [n.noteId],
+          expense_ids: [byNote.get(n.noteId)!],
+          difference: 0,
+          comment: label,
+        })),
+      );
+      fail(linkError);
     }),
     deleteExpense: run(async (id: string) => {
       const { error } = await supabase.from("expenses").delete().eq("id", id);
