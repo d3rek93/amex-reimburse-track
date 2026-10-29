@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 import { MerchantRefund, PayOtherwise, PickExpenses, SelectableRow, claimsOf, expensesOf, useRunner } from "@/components/ReconcileTools";
 import { useLedger, useLedgerActions, type Ledger, type MatchView } from "@/lib/ledger";
 import type { Match } from "@/lib/reconciliation";
@@ -80,6 +81,24 @@ function Review({ ledger }: { ledger: Ledger }) {
       toast({ title: "Proposition écartée", description: "Elle ne sera plus proposée. La note reste dans « Sans correspondance »." });
     },
   };
+  // Ignoring a transfer is easy to click by mistake: the message offers to undo it.
+  const ignore = async (t: { id: string; date: string; amount_eur: number }) => {
+    try {
+      await base.ignoreTransfer(t.id, true);
+      toast({
+        title: "Virement écarté",
+        description: `${eur(t.amount_eur)} du ${shortDate(t.date)} : il ne compte plus comme remboursement de frais.`,
+        action: (
+          <ToastAction altText="Annuler" onClick={() => void base.ignoreTransfer(t.id, false)}>
+            Annuler
+          </ToastAction>
+        ),
+      });
+    } catch (e) {
+      toast({ title: "Action impossible", description: (e as Error).message, variant: "destructive" });
+    }
+  };
+  const ignored = ledger.transferViews.filter((t) => t.status === "ignored");
   const other = (m: Match) => (
     <Button size="sm" variant="ghost" disabled={busy !== null} onClick={() => setPicking(m.noteIds)}>
       Autre dépense…
@@ -111,7 +130,7 @@ function Review({ ledger }: { ledger: Ledger }) {
     return r?.transferId ? ledger.transferViews.find((t) => t.id === r.transferId) : undefined;
   };
 
-  if (s.length === 0 && personal.length === 0 && credits.length === 0 && noNote.length === 0 && absent.length === 0 && toSplit.length === 0) {
+  if (ignored.length === 0 && s.length === 0 && personal.length === 0 && credits.length === 0 && noNote.length === 0 && absent.length === 0 && toSplit.length === 0) {
     return (
       <p className="text-muted-foreground max-w-xl">
         Rien à vérifier. Les notes et dépenses restantes n'ont aucun candidat : retrouve-les dans « Sans correspondance ».
@@ -187,7 +206,7 @@ function Review({ ledger }: { ledger: Ledger }) {
                 <span className="w-14 shrink-0 text-muted-foreground tabular-nums">{shortDate(t.date)}</span>
                 <span className="flex-1 min-w-[12rem] truncate">{t.label}</span>
                 <span className="tabular-nums font-medium">{eur(t.amount_eur)}</span>
-                <Button size="sm" variant="ghost" disabled={busy !== null} onClick={() => run(t.id, () => base.ignoreTransfer(t.id, true), "Virement ignoré")}>
+                <Button size="sm" variant="ghost" disabled={busy !== null} onClick={() => void ignore(t)}>
                   Pas un remboursement de frais
                 </Button>
               </div>
@@ -344,7 +363,7 @@ function Review({ ledger }: { ledger: Ledger }) {
                 <span className="w-14 shrink-0 text-muted-foreground tabular-nums">{shortDate(t.date)}</span>
                 <span className="flex-1 min-w-[12rem] truncate">{t.label}</span>
                 <span className="tabular-nums font-medium">{eur(t.amount_eur)}</span>
-                <Button size="sm" variant="ghost" disabled={busy !== null} onClick={() => run(t.id, () => base.ignoreTransfer(t.id, true), "Virement ignoré")}>
+                <Button size="sm" variant="ghost" disabled={busy !== null} onClick={() => void ignore(t)}>
                   Pas un remboursement de frais
                 </Button>
               </div>
@@ -375,6 +394,22 @@ function Review({ ledger }: { ledger: Ledger }) {
               Tout marquer perso ({personal.length})
             </Button>
           )}
+        </Section>
+      )}
+      {ignored.length > 0 && (
+        <Section title="Virements écartés" hint="Marqués « pas un remboursement de frais » : ils ne comptent ni dans les remboursements, ni dans les contrôles.">
+          <div className="rounded-lg border bg-card divide-y">
+            {ignored.map((t) => (
+              <div key={t.id} className="flex flex-wrap items-center gap-3 px-4 py-2 text-sm">
+                <span className="w-14 shrink-0 text-muted-foreground tabular-nums">{shortDate(t.date)}</span>
+                <span className="flex-1 min-w-[12rem] truncate text-muted-foreground">{t.label}</span>
+                <span className="tabular-nums">{eur(t.amount_eur)}</span>
+                <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => run(t.id, () => base.ignoreTransfer(t.id, false), "Virement rétabli")}>
+                  Rétablir
+                </Button>
+              </div>
+            ))}
+          </div>
         </Section>
       )}
     </div>
