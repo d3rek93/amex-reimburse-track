@@ -4,7 +4,9 @@ import { AppLayout } from "@/components/AppLayout";
 import { NoteStatusLabel } from "@/components/StatusLabel";
 import { NoteDetails } from "@/components/NoteDetails";
 import { Input } from "@/components/ui/input";
-import { useLedger, type BatchView, type Ledger } from "@/lib/ledger";
+import { useSearchParams } from "react-router-dom";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useLedger, type BatchView, type Ledger, type TransferView } from "@/lib/ledger";
 import { categoryLabel, dayDate, eur, monthLabel, shortDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -12,6 +14,8 @@ export default function NotesPage() {
   const { ledger, isLoading, error } = useLedger();
   const [query, setQuery] = useState("");
   const [openNote, setOpenNote] = useState<string | null>(null);
+  const [params, setParams] = useSearchParams();
+  const tab = params.get("tab") ?? "payments";
 
   const months = useMemo(() => {
     if (!ledger) return [];
@@ -38,7 +42,17 @@ export default function NotesPage() {
         <p className="text-destructive">Chargement impossible : {(error as Error).message}</p>
       ) : isLoading || !ledger ? (
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      ) : ledger.batches.length === 0 ? (
+      ) : (
+        <Tabs value={tab} onValueChange={(v) => setParams(v === "payments" ? {} : { tab: v }, { replace: true })}>
+          <TabsList className="mb-6 h-auto flex-wrap justify-start">
+            <TabsTrigger value="payments">Paiements des relevés</TabsTrigger>
+            <TabsTrigger value="transfers">Virements reçus ({ledger.transferViews.length})</TabsTrigger>
+          </TabsList>
+          <TabsContent value="transfers">
+            <Transfers ledger={ledger} />
+          </TabsContent>
+          <TabsContent value="payments">
+      {ledger.batches.length === 0 ? (
         <p className="text-muted-foreground max-w-xl">
           Aucun relevé Jetfly importé. Utilise « Importer » et choisis les fichiers XLS reçus chaque début de mois : tu
           peux en sélectionner plusieurs d'un coup.
@@ -54,6 +68,9 @@ export default function NotesPage() {
           ))}
           <NoteDetails ledger={ledger} noteId={openNote} onClose={() => setOpenNote(null)} />
         </div>
+      )}
+          </TabsContent>
+        </Tabs>
       )}
     </AppLayout>
   );
@@ -157,6 +174,66 @@ function Batch({ batch, ledger, onOpen }: { batch: BatchView; ledger: Ledger; on
             </tbody>
           </table>
         </div>
+      )}
+    </div>
+  );
+}
+
+const TRANSFER_STATUS: Record<TransferView["status"], [string, string]> = {
+  statement: ["Paiement d'un relevé Jetfly", "text-success"],
+  bank: ["Rattaché aux dépenses ci-dessous", "text-success"],
+  to_split: ["À répartir : le prochain relevé dira quelles dépenses il paie", "text-muted-foreground"],
+  absent: ["Absent des relevés : rien ne l'explique", "text-destructive"],
+  before_statements: ["Antérieur à tes relevés Jetfly", "text-muted-foreground"],
+  ignored: ["Écarté : pas un remboursement de frais", "text-muted-foreground"],
+};
+
+/** Every Jetfly transfer received, and what it paid back. */
+function Transfers({ ledger }: { ledger: Ledger }) {
+  const [limit, setLimit] = useState(40);
+  const batchOf = new Map(ledger.batches.filter((b) => b.transfer).map((b) => [b.transfer!.id, b]));
+  const list = ledger.transferViews;
+  if (list.length === 0) {
+    return <p className="text-muted-foreground max-w-xl">Aucun virement Jetfly reçu pour l'instant. Synchronise tes comptes depuis le tableau de bord.</p>;
+  }
+  return (
+    <div className="space-y-3 max-w-4xl">
+      <p className="text-sm text-muted-foreground">
+        Virements de Jetfly arrivés sur ton compte Boursobank, du plus récent au plus ancien, avec ce qu'ils remboursent.
+      </p>
+      <div className="rounded-lg border bg-card divide-y">
+        {list.slice(0, limit).map((t) => {
+          const batch = batchOf.get(t.id);
+          const [label, tone] = TRANSFER_STATUS[t.status];
+          const paid = t.lineIds.map((id) => ledger.expenseById.get(id)).filter(Boolean);
+          return (
+            <div key={t.id} className="px-4 py-2.5 text-sm">
+              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+                <span className="w-20 shrink-0 tabular-nums text-muted-foreground">{dayDate(t.date)}</span>
+                <span className="font-medium tabular-nums">{eur(t.amount_eur)}</span>
+                <span className={cn("flex-1 min-w-[14rem]", tone)}>
+                  {batch ? `Paiement ${batch.ref} du ${shortDate(batch.paymentDate)}, ${batch.noteIds.length} note${batch.noteIds.length > 1 ? "s" : ""}` : label}
+                </span>
+              </div>
+              {t.status === "bank" && paid.length > 0 && (
+                <ul className="mt-1 ml-[5.75rem] space-y-0.5 text-muted-foreground">
+                  {paid.map((e) => (
+                    <li key={e!.id} className="flex gap-3">
+                      <span className="w-14 tabular-nums">{shortDate(e!.date)}</span>
+                      <span className="flex-1 min-w-0 truncate">{e!.description}</span>
+                      <span className="tabular-nums">{eur(e!.amount_eur)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {list.length > limit && (
+        <button type="button" className="text-sm underline underline-offset-4" onClick={() => setLimit((l) => l + 60)}>
+          Afficher plus ({list.length - limit} restants)
+        </button>
       )}
     </div>
   );

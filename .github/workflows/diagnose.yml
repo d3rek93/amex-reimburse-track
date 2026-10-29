@@ -68,15 +68,3 @@ jobs:
 # rerun 1793201022
 # rerun 1793201067
 # rerun 1793201250
-      - name: Recent Jetfly transfers (temporary, asked by the user)
-        run: |
-          ref=$(sed -n 's/^project_id = "\(.*\)"/\1/p' supabase/config.toml)
-          q() {
-            curl -s -X POST "https://api.supabase.com/v1/projects/$ref/database/query" \
-              -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" -H "Content-Type: application/json" \
-              -d "$(jq -n --arg q "$1" '{query: $q}')"
-          }
-          echo "::warning::transfers since 2026-10-20: $(q "select date, amount_eur, ignored, split_part(bank_transaction_id, ':', 1) = 'file' as from_file, created_at from jetfly_transfers where date >= '2026-10-20' order by date" | jq -c '.')"
-          echo "::warning::last sync: $(q "select aspsp_name, last_synced_at, valid_until from bank_sessions" | jq -c '.')"
-          echo "::warning::latest bourso lines: $(q "select max(date) as last_expense, max(created_at) as last_insert from expenses where source in ('Boursobank','Prélèvement') and bank_transaction_id not like 'file:%'" | jq -c '.')"
-
