@@ -51,7 +51,7 @@ const TEXT = {
       n > 1
         ? "Pourriez-vous vérifier ces montants et les régulariser lors d'un prochain paiement ? Je peux vous transmettre les justificatifs si besoin."
         : "Pourriez-vous vérifier ce montant et le régulariser lors d'un prochain paiement ? Je peux vous transmettre le justificatif si besoin.",
-    thanks: "Merci d'avance,",
+    thanks: "Je vous remercie par avance.",
     bye: "Cordialement,",
   },
   en: {
@@ -73,7 +73,7 @@ const TEXT = {
       n > 1
         ? "Could you please check these amounts and adjust them in a next payment? I can send you the receipts if needed."
         : "Could you please check this amount and adjust it in a next payment? I can send you the receipt if needed.",
-    thanks: "Thank you in advance,",
+    thanks: "Thank you in advance.",
     bye: "Best regards,",
   },
 };
@@ -101,9 +101,8 @@ export function buildDisputeMail(items: MailItem[], lang: MailLanguage): { subje
     blocks.join("\n\n"),
     "",
     ...(items.length > 1 ? [`${t.total} : ${money(total, lang)}`, ""] : []),
-    t.ask(items.length),
+    `${t.ask(items.length)} ${t.thanks}`,
     "",
-    t.thanks,
     t.bye,
     "",
   ].join("\n");
