@@ -25,6 +25,7 @@ const pages = [
   ["reconcile-review", "/reconcile"],
   ["reconcile-unmatched", "/reconcile?tab=unmatched"],
   ["reconcile-matched", "/reconcile?tab=matched"],
+  ["reconcile-disputes", "/reconcile?tab=disputes"],
   ["expenses", "/expenses"],
   ["notes", "/notes"],
   ["advance", "/advance"],
@@ -84,6 +85,15 @@ for (const [device, viewport] of [["desktop", { width: 1280, height: 900 }], ["m
         await page.waitForTimeout(200);
         await page.screenshot({ path: `${out}/${device}-dashboard-all.png`, fullPage: true });
         await page.getByRole("button", { name: "3 derniers mois" }).click();
+      }
+    }
+    if (name === "reconcile-disputes" && device === "desktop") {
+      const prep = page.getByRole("button", { name: "Préparer le mail", exact: true }).first();
+      if (await prep.count()) {
+        await prep.click();
+        await page.waitForTimeout(300);
+        await page.screenshot({ path: `${out}/${device}-dispute-mail.png` });
+        await page.keyboard.press("Escape");
       }
     }
     if (name === "notes" && device === "desktop") {

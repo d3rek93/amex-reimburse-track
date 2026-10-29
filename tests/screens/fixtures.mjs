@@ -105,3 +105,19 @@ export const account_snapshots = [
 ];
 export const bank_sessions = [{ last_synced_at: new Date(Date.now() - 2 * 3600 * 1000).toISOString() }];
 export const user = { id: uid, aud: "authenticated", role: "authenticated", email: "demo@example.com" };
+
+const mercure = expenses.find((e) => e.description.startsWith("MERCURE HOTEL GENEVA"));
+export const disputes = [
+  {
+    id: "40000000-0000-4000-8000-000000000001",
+    note_ids: ["595759"],
+    expense_ids: [mercure.id],
+    difference: 4,
+    reason: "Taxe de séjour payée sur place, sur la facture",
+    status: "open",
+    outcome: null,
+    sent_at: null,
+    closed_at: null,
+    created_at: "2026-10-29T06:30:00Z",
+  },
+];
