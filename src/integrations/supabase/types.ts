@@ -269,6 +269,48 @@ export type Database = {
         }
         Relationships: []
       }
+      disputes: {
+        Row: {
+          closed_at: string | null
+          created_at: string
+          difference: number
+          expense_ids: string[]
+          id: string
+          note_ids: string[]
+          outcome: string | null
+          reason: string | null
+          sent_at: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          closed_at?: string | null
+          created_at?: string
+          difference: number
+          expense_ids?: string[]
+          id?: string
+          note_ids?: string[]
+          outcome?: string | null
+          reason?: string | null
+          sent_at?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          closed_at?: string | null
+          created_at?: string
+          difference?: number
+          expense_ids?: string[]
+          id?: string
+          note_ids?: string[]
+          outcome?: string | null
+          reason?: string | null
+          sent_at?: string | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       expenses: {
         Row: {
           amount_eur: number

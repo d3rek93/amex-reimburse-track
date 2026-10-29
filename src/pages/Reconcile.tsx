@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
+import { DisputesTab, RefuseGap } from "@/components/Disputes";
 import { ToastAction } from "@/components/ui/toast";
 import { MerchantRefund, PayOtherwise, PickExpenses, SelectableRow, claimsOf, expensesOf, useRunner } from "@/components/ReconcileTools";
 import { useLedger, useLedgerActions, type Ledger, type MatchView } from "@/lib/ledger";
@@ -35,12 +36,16 @@ export default function Reconcile() {
               Sans correspondance ({ledger.counts.missingNotes + ledger.counts.unclaimedExpenses})
             </TabsTrigger>
             <TabsTrigger value="matched">Associées ({ledger.matches.length})</TabsTrigger>
+            <TabsTrigger value="disputes">Réclamations ({ledger.counts.openDisputes})</TabsTrigger>
           </TabsList>
           <TabsContent value="review">
             <Review ledger={ledger} />
           </TabsContent>
           <TabsContent value="unmatched">
             <Unmatched ledger={ledger} />
+          </TabsContent>
+          <TabsContent value="disputes">
+            <DisputesTab ledger={ledger} />
           </TabsContent>
           <TabsContent value="matched">
             <Matched ledger={ledger} />
@@ -73,6 +78,7 @@ function Review({ ledger }: { ledger: Ledger }) {
   const { busy, run } = useRunner();
   const { toast } = useToast();
   const [picking, setPicking] = useState<string[] | null>(null);
+  const [refusing, setRefusing] = useState<Match | null>(null);
   const s = ledger.result.suggestions;
   const actions = {
     ...base,
@@ -143,6 +149,7 @@ function Review({ ledger }: { ledger: Ledger }) {
   return (
     <div className="space-y-10">
       <PickExpenses ledger={ledger} noteIds={picking} onClose={() => setPicking(null)} />
+      <RefuseGap match={refusing} onClose={() => setRefusing(null)} />
       {noNote.length > 0 && (
         <Section
           title="Remboursées sans note Jetfly"
@@ -269,6 +276,11 @@ function Review({ ledger }: { ledger: Ledger }) {
                   <Button size="sm" disabled={busy !== null} onClick={() => run(key(m), () => actions.confirm(m), "Écart accepté")}>
                     Accepter l'écart
                   </Button>
+                  {m.difference > 0 && (
+                    <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => setRefusing(m)}>
+                      Refuser l'écart
+                    </Button>
+                  )}
                   <Button size="sm" variant="ghost" disabled={busy !== null} onClick={() => run(key(m), () => actions.reject(m))}>
                     Ce n'est pas la même dépense
                   </Button>
@@ -706,6 +718,7 @@ function Column({ title, empty, children }: { title: string; empty: string; chil
 type Filter = "all" | "auto" | "confirmed" | "gap";
 
 function Matched({ ledger }: { ledger: Ledger }) {
+  const [refusing, setRefusing] = useState<MatchView | null>(null);
   const actions = useLedgerActions();
   const { busy, run } = useRunner();
   const [filter, setFilter] = useState<Filter>("all");
@@ -746,7 +759,9 @@ function Matched({ ledger }: { ledger: Ledger }) {
           footer={
             <>
               <span className="text-xs text-muted-foreground mr-auto" title={m.reason}>
-                {m.auto
+                {m.disputeId
+                  ? "Réclamation en cours"
+                  : m.auto
                   ? "Automatique"
                   : m.comment?.startsWith("Payée")
                     ? m.comment
@@ -754,6 +769,11 @@ function Matched({ ledger }: { ledger: Ledger }) {
                       ? "Validée par toi, écart accepté"
                       : "Validée par toi"}
               </span>
+              {m.linkId && m.difference > 0.005 && (
+                <Button size="sm" variant="ghost" className="h-7" onClick={() => setRefusing(m)}>
+                  Réclamer l'écart
+                </Button>
+              )}
               <Button size="sm" variant="ghost" className="h-7" disabled={busy !== null} onClick={() => run(m.linkId ?? m.lineIds.join(","), () => actions.unlink(m), "Dissociées")}>
                 Dissocier
               </Button>
@@ -761,6 +781,7 @@ function Matched({ ledger }: { ledger: Ledger }) {
           }
         />
       ))}
+      <RefuseGap match={refusing} onClose={() => setRefusing(null)} />
       {list.length > limit && (
         <Button variant="outline" onClick={() => setLimit((l) => l + 50)}>
           Afficher plus ({list.length - limit} restantes)

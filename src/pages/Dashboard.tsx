@@ -86,6 +86,9 @@ function Content({ ledger }: { ledger: Ledger }) {
     { n: counts.toReview, label: "à vérifier", hint: "Propositions, écarts et remboursements à justifier", to: "/reconcile" },
     { n: counts.missingNotes, label: `note${s(counts.missingNotes)} sans dépense`, hint: "Payées par Jetfly, introuvables sur tes relevés", to: "/reconcile?tab=unmatched" },
     { n: counts.unclaimedExpenses, label: `dépense${s(counts.unclaimedExpenses)} sans note`, hint: "Pas encore déclarées, ou perso", to: "/reconcile?tab=unmatched" },
+    ...(counts.openDisputes > 0
+      ? [{ n: counts.openDisputes, label: `réclamation${s(counts.openDisputes)} en cours`, hint: `${eur(counts.disputedAmount)} réclamés au service notes de frais`, to: "/reconcile?tab=disputes" }]
+      : []),
     { n: counts.batchesWithoutTransfer, label: `paiement${s(counts.batchesWithoutTransfer)} Jetfly sans virement`, hint: "Annoncés dans un relevé, pas vus sur Boursobank", to: "/notes" },
   ];
 
@@ -128,7 +131,7 @@ function Content({ ledger }: { ledger: Ledger }) {
 
       <section>
         <h2 className="text-base font-semibold mb-3">À traiter</h2>
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-px rounded-lg border bg-border overflow-hidden">
+        <div className={cn("grid sm:grid-cols-2 gap-px rounded-lg border bg-border overflow-hidden", tasks.length > 4 ? "lg:grid-cols-5" : "lg:grid-cols-4")}>
           {tasks.map((t) => (
             <Link
               key={t.label}
@@ -225,7 +228,7 @@ function MonthSummary({ ledger }: { ledger: Ledger }) {
     const status = ledger.expenseStatus.get(e.id);
     m.spent += e.amount_eur;
     m.count += 1;
-    if (status === "validated" || status === "discrepancy") m.matched += e.amount_eur;
+    if (status === "validated" || status === "discrepancy" || status === "disputed") m.matched += e.amount_eur;
     else if (status === "reimbursed" || status === "no_note") m.received += e.amount_eur;
     else if (status === "pending" || status === "to_review") m.pending += e.amount_eur;
     months.set(key, m);

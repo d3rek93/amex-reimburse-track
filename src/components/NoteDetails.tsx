@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { PairStrip } from "@/components/PairStrip";
+import { RefuseGap } from "@/components/Disputes";
 import { NoteStatusLabel } from "@/components/StatusLabel";
 import { PayOtherwise, PickExpenses, claimsOf, expensesOf, useRunner } from "@/components/ReconcileTools";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useLedgerActions, type Ledger } from "@/lib/ledger";
+import type { Match } from "@/lib/reconciliation";
 import { categoryLabel, eur, longDate, shortDate } from "@/lib/format";
 
 /**
@@ -15,6 +17,7 @@ export function NoteDetails({ ledger, noteId, onClose }: { ledger: Ledger; noteI
   const actions = useLedgerActions();
   const { busy, run } = useRunner();
   const [mode, setMode] = useState<"details" | "pick" | "pay" | "extend">("details");
+  const [refusing, setRefusing] = useState<Match | null>(null);
   const note = noteId ? ledger.claimById.get(noteId) : undefined;
 
   const close = () => {
@@ -91,8 +94,19 @@ export function NoteDetails({ ledger, noteId, onClose }: { ledger: Ledger; noteI
               footer={
                 <>
                   <span className="text-xs text-muted-foreground mr-auto">
-                    {match.auto ? "Associée automatiquement" : match.comment?.startsWith("Payée") ? match.comment : "Validée par toi"}
+                    {match.disputeId
+                      ? "Réclamation en cours (onglet Réclamations)"
+                      : match.auto
+                        ? "Associée automatiquement"
+                        : match.comment?.startsWith("Payée")
+                          ? match.comment
+                          : "Validée par toi"}
                   </span>
+                  {!match.disputeId && match.linkId && match.difference > 0.005 && (
+                    <Button size="sm" variant="ghost" className="h-7" onClick={() => setRefusing(match)}>
+                      Réclamer l'écart
+                    </Button>
+                  )}
                   <Button size="sm" variant="ghost" className="h-7" onClick={() => setMode("extend")}>
                     Ajouter une dépense…
                   </Button>
@@ -131,6 +145,11 @@ export function NoteDetails({ ledger, noteId, onClose }: { ledger: Ledger; noteI
                     >
                       {m.type === "mismatch" ? "Accepter l'écart" : m.type === "complete" ? "Ajouter à l'association" : "Associer"}
                     </Button>
+                    {m.type === "mismatch" && m.difference > 0 && (
+                      <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => setRefusing(m)}>
+                        Refuser l'écart
+                      </Button>
+                    )}
                     <Button
                       size="sm"
                       variant="ghost"
@@ -159,6 +178,7 @@ export function NoteDetails({ ledger, noteId, onClose }: { ledger: Ledger; noteI
             </Button>
           </section>
         )}
+        <RefuseGap match={refusing} onClose={(done) => { setRefusing(null); if (done) close(); }} />
       </DialogContent>
     </Dialog>
   );

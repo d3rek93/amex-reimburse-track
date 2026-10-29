@@ -16,6 +16,7 @@ const TONE: Record<Tone, string> = {
 const EXPENSE: Record<ExpenseStatus, [string, Tone]> = {
   validated: ["Remboursée et validée", "ok"],
   discrepancy: ["Remboursée, écart accepté", "warn"],
+  disputed: ["Réclamation en cours", "missing"],
   reimbursed: ["Remboursée, relevé à venir", "ok"],
   no_note: ["Remboursée sans note Jetfly", "missing"],
   to_review: ["À vérifier", "todo"],
@@ -30,6 +31,7 @@ const EXPENSE: Record<ExpenseStatus, [string, Tone]> = {
 const REFUND: Record<ExpenseStatus, [string, Tone] | null> = {
   validated: ["Reçu", "ok"],
   discrepancy: ["Reçu", "ok"],
+  disputed: ["Reçu en partie", "warn"],
   reimbursed: ["Reçu", "ok"],
   no_note: ["Reçu", "ok"],
   to_review: ["En attente", "wait"],
@@ -44,6 +46,7 @@ const REFUND: Record<ExpenseStatus, [string, Tone] | null> = {
 const VALIDATION: Record<ExpenseStatus, [string, Tone] | null> = {
   validated: ["Validée", "ok"],
   discrepancy: ["Écart accepté", "warn"],
+  disputed: ["Réclamation en cours", "missing"],
   reimbursed: ["Relevé à venir", "wait"],
   no_note: ["Absente du relevé", "missing"],
   to_review: ["À vérifier", "todo"],
@@ -57,6 +60,7 @@ const VALIDATION: Record<ExpenseStatus, [string, Tone] | null> = {
 const NOTE: Record<NoteStatus, [string, Tone]> = {
   matched: ["Associée", "ok"],
   discrepancy: ["Écart accepté", "warn"],
+  disputed: ["Réclamation en cours", "missing"],
   to_review: ["À vérifier", "todo"],
   missing: ["Sans dépense", "missing"],
   cancelled: ["Annulée par Jetfly", "off"],

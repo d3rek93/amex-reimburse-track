@@ -74,6 +74,8 @@ export interface BatchView {
  * - to_review / pending: not paid back yet (pending), with proposals (to_review)
  */
 export type ExpenseStatus =
+  /** Paid back through its note, but the user refused the gap and claims it. */
+  | "disputed"
   | "personal"
   /** A credit that belongs to the user (AMEX offer, welcome credit…), not to Jetfly. */
   | "gain"
@@ -93,11 +95,35 @@ export interface TransferView extends TransferRow {
   lineIds: string[];
 }
 
-export type NoteStatus = "matched" | "discrepancy" | "to_review" | "missing" | "cancelled" | "before_history";
+export type NoteStatus = "matched" | "discrepancy" | "disputed" | "to_review" | "missing" | "cancelled" | "before_history";
 
 /** A match as shown in the UI: confirmed ones carry the link id they come from. */
+export interface DisputeRow {
+  id: string;
+  note_ids: string[];
+  expense_ids: string[];
+  difference: number;
+  reason: string | null;
+  status: "open" | "closed";
+  outcome: "settled" | "accepted" | null;
+  sent_at: string | null;
+  closed_at: string | null;
+  created_at: string;
+}
+
+/** An open claim, with what is known today. */
+export interface DisputeView extends DisputeRow {
+  notes: Claim[];
+  expenses: ExpenseRow[];
+  /** Bank total minus what Jetfly has paid today (corrections included). */
+  currentDifference: number;
+  /** Jetfly paid the difference since (a correction on the same note number). */
+  settled: boolean;
+}
+
 export interface MatchView extends Match {
   linkId?: string;
+  disputeId?: string;
   /** The user's note on the link, e.g. "Payée en espèces". */
   comment?: string | null;
 }
@@ -117,6 +143,8 @@ export interface Ledger {
   matchOfNote: Map<string, MatchView>;
   /** Unclaimed expenses at merchants the user already marked as personal. */
   personalSuggestions: string[];
+  /** Open claims, newest first. */
+  disputes: DisputeView[];
   /** How each pro expense was paid back, when it was. */
   reimbursementOf: Map<string, Reimbursement>;
   transferViews: TransferView[];
@@ -129,6 +157,9 @@ export interface Ledger {
   advance: AdvancePosition;
   lastSyncedAt: string | null;
   counts: {
+    /** Open claims and the amount claimed (settled ones excluded). */
+    openDisputes: number;
+    disputedAmount: number;
     /** AMEX credits with no purchase to cancel: offer or credit note, to classify. */
     looseCredits: number;
     /** Paid back by a transfer, yet absent from statements already in. */
@@ -180,12 +211,13 @@ interface RawData {
   transfers: TransferRow[];
   links: LinkRow[];
   rejections: { note_id: string; expense_id: string }[];
+  disputes: DisputeRow[];
   snapshot: AccountSnapshot | null;
   lastSyncedAt: string | null;
 }
 
 async function loadRaw(): Promise<RawData> {
-  const [expenses, claimLines, batches, transfers, links, rejections, snap, sessions] = await Promise.all([
+  const [expenses, claimLines, batches, transfers, links, rejections, disputes, snap, sessions] = await Promise.all([
     readAll<ExpenseRow>(
       "expenses",
       "id, date, description, amount_eur, original_amount, original_currency, source, is_personal, bank_transaction_id",
@@ -200,6 +232,11 @@ async function loadRaw(): Promise<RawData> {
     readAll<TransferRow>("jetfly_transfers", "id, date, amount_eur, label, ignored", "date"),
     readAll<LinkRow>("reconciliation_links", "id, note_ids, expense_ids, difference, comment", "created_at"),
     readAll<RawData["rejections"][number]>("reconciliation_rejections", "note_id, expense_id", "created_at"),
+    readAll<DisputeRow>(
+      "disputes",
+      "id, note_ids, expense_ids, difference, reason, status, outcome, sent_at, closed_at, created_at",
+      "created_at",
+    ),
     supabase
       .from("account_snapshots")
       .select("snapshot_date, balance_eur, pending_card_eur, amex_last_debit_date")
@@ -219,6 +256,7 @@ async function loadRaw(): Promise<RawData> {
     transfers: transfers.map((t) => ({ ...t, amount_eur: n(t.amount_eur), ignored: Boolean(t.ignored) })),
     links: links.map((l) => ({ ...l, difference: n(l.difference) })),
     rejections,
+    disputes: disputes.map((d) => ({ ...d, difference: n(d.difference) })),
     snapshot: (snap.data as AccountSnapshot | null) ?? null,
     lastSyncedAt: (sessions.data?.[0]?.last_synced_at as string | null) ?? null,
   };
@@ -253,7 +291,12 @@ export function buildLedger(raw: RawData): Ledger {
     batchRef: l.batch_ref,
     paymentDate: l.payment_date,
   }));
-  const confirmed = raw.links.map((l) => ({ noteIds: l.note_ids, lineIds: l.expense_ids, ref: l.id }));
+  // Open claims keep their pairing, like a validated association.
+  const openDisputes = raw.disputes.filter((d) => d.status === "open");
+  const confirmed = [
+    ...raw.links.map((l) => ({ noteIds: l.note_ids, lineIds: l.expense_ids, ref: l.id })),
+    ...openDisputes.map((d) => ({ noteIds: d.note_ids, lineIds: d.expense_ids, ref: `dispute:${d.id}` })),
+  ];
   const rules = learnRules(confirmed, lines, buildClaims(claimLines));
 
   const result = reconcile({
@@ -267,6 +310,7 @@ export function buildLedger(raw: RawData): Ledger {
 
   const linkById = new Map(raw.links.map((l) => [l.id, l]));
   const matches: MatchView[] = result.matches.map((m) => {
+    if (m.ref?.startsWith("dispute:")) return { ...m, disputeId: m.ref.slice(8) };
     const link = m.ref ? linkById.get(m.ref) : undefined;
     return link ? { ...m, linkId: link.id, difference: link.difference, comment: link.comment } : m;
   });
@@ -318,6 +362,7 @@ export function buildLedger(raw: RawData): Ledger {
     let status: ExpenseStatus;
     if (manuallyVoid.has(e.id)) status = "neutralized";
     else if (e.is_personal) status = e.amount_eur < 0 ? "gain" : "personal";
+    else if (m?.disputeId) status = Math.abs(m.difference) >= 0.005 ? "disputed" : "validated";
     else if (m) status = Math.abs(m.difference) >= 0.005 ? "discrepancy" : "validated";
     else if (neutralized.has(e.id)) status = "neutralized";
     else if (paid && paid.transferId && absentTransfers.has(paid.transferId)) status = "no_note";
@@ -348,6 +393,7 @@ export function buildLedger(raw: RawData): Ledger {
     const m = matchOfNote.get(c.noteId);
     let status: NoteStatus;
     if (c.cancelled) status = "cancelled";
+    else if (m?.disputeId) status = Math.abs(m.difference) >= 0.005 ? "disputed" : "matched";
     else if (m) status = Math.abs(m.difference) >= 0.005 ? "discrepancy" : "matched";
     else if (inSuggestion.has(c.noteId)) status = "to_review";
     else if (!notesFrom || c.date < notesFrom) status = "before_history";
@@ -388,7 +434,8 @@ export function buildLedger(raw: RawData): Ledger {
     raw.snapshot,
     raw.expenses.map((e) => {
       const status = expenseStatus.get(e.id)!;
-      const reimbursed = ["validated", "discrepancy", "reimbursed", "no_note", "neutralized"].includes(status) || notePaid.has(e.id);
+      const reimbursed =
+        ["validated", "discrepancy", "disputed", "reimbursed", "no_note", "neutralized"].includes(status) || notePaid.has(e.id);
       return {
         id: e.id,
         date: e.date,
@@ -406,6 +453,18 @@ export function buildLedger(raw: RawData): Ledger {
     transferViews.filter((t) => t.status === "to_split").reduce((sum, t) => sum + t.amount_eur, 0),
   );
 
+  const disputes: DisputeView[] = openDisputes
+    .map((d) => {
+      const m = matches.find((x) => x.disputeId === d.id);
+      const notes = d.note_ids.map((n) => claimById.get(n)).filter(Boolean) as Claim[];
+      const exps = d.expense_ids.map((id) => expenseById.get(id)).filter(Boolean) as ExpenseRow[];
+      const current = m
+        ? m.difference
+        : Math.round((exps.reduce((s, e) => s + e.amount_eur, 0) - notes.reduce((s, c) => s + c.amount, 0)) * 100) / 100;
+      return { ...d, notes, expenses: exps, currentDifference: current, settled: Math.abs(current) < 0.005 };
+    })
+    .sort((a, b) => b.created_at.localeCompare(a.created_at));
+
   const isDiscrepancy = (s: Match) => s.type === "mismatch" || s.type === "date_mismatch";
   const reviewGroups = new Set(result.suggestions.map((s) => s.noteIds.join(",")));
   return {
@@ -422,6 +481,7 @@ export function buildLedger(raw: RawData): Ledger {
     matchOfExpense,
     matchOfNote,
     personalSuggestions,
+    disputes,
     reimbursementOf: allocation.byLine,
     transferViews,
     statementsEnd,
@@ -430,6 +490,8 @@ export function buildLedger(raw: RawData): Ledger {
     advance,
     lastSyncedAt: raw.lastSyncedAt,
     counts: {
+      openDisputes: disputes.filter((d) => !d.settled).length,
+      disputedAmount: disputes.filter((d) => !d.settled).reduce((s, d) => s + d.currentDifference, 0),
       looseCredits: [...expenseStatus.values()].filter((s) => s === "refund").length,
       noNote: [...expenseStatus.values()].filter((s) => s === "no_note").length,
       absentTransfers: absentTransfers.size,
@@ -635,6 +697,52 @@ export function useLedgerActions() {
         })),
       );
       fail(linkError);
+    }),
+    /** Refuse a gap: open a claim on this pairing. */
+    dispute: run(async (m: Match, reason?: string) => {
+      const { error } = await supabase.from("disputes").insert({
+        user_id: await userId(),
+        note_ids: m.noteIds,
+        expense_ids: m.lineIds,
+        difference: Math.round(m.difference * 100) / 100,
+        reason: reason ?? null,
+      });
+      fail(error);
+      // A gap accepted earlier on the same pairing gives way to the claim.
+      const link = (m as MatchView).linkId;
+      if (link) {
+        const { error: unlinkError } = await supabase.from("reconciliation_links").delete().eq("id", link);
+        fail(unlinkError);
+      }
+    }),
+    markDisputesSent: run(async (ids: string[]) => {
+      if (ids.length === 0) return;
+      const { error } = await supabase.from("disputes").update({ sent_at: new Date().toISOString() }).in("id", ids);
+      fail(error);
+    }),
+    /**
+     * Close a claim. "settled": Jetfly paid; "accepted": the user gives up and
+     * accepts the gap. Either way the pairing stays as a validated association.
+     */
+    closeDispute: run(async (d: DisputeView, outcome: "settled" | "accepted") => {
+      const { error: linkError } = await supabase.from("reconciliation_links").insert({
+        user_id: await userId(),
+        note_ids: d.note_ids,
+        expense_ids: d.expense_ids,
+        difference: Math.round(d.currentDifference * 100) / 100,
+        comment: outcome === "settled" ? "Réclamation régularisée par Jetfly" : "Réclamation abandonnée, écart accepté",
+      });
+      fail(linkError);
+      const { error } = await supabase
+        .from("disputes")
+        .update({ status: "closed", outcome, closed_at: new Date().toISOString() })
+        .eq("id", d.id);
+      fail(error);
+    }),
+    /** Withdraw a claim opened by mistake: the gap is back to review. */
+    deleteDispute: run(async (id: string) => {
+      const { error } = await supabase.from("disputes").delete().eq("id", id);
+      fail(error);
     }),
     /** A transfer that is not an expense reimbursement (advance top-up…). */
     ignoreTransfer: run(async (id: string, ignored: boolean) => {
