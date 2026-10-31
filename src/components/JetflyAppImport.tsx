@@ -193,7 +193,7 @@ export function JetflyAppImport({ open, onOpenChange }: { open: boolean; onOpenC
               <PaymentCard key={`${r.date}-${r.total}`} row={r} ledger={ledger ?? null} onChange={(p) => update(i, p)} />
             ))}
             <DialogFooter>
-              <Button variant="ghost" onClick={() => setRows(null)}>
+              <Button variant="outline" onClick={() => setRows(null)}>
                 Recommencer
               </Button>
               <Button onClick={() => void save()} disabled={saving || count === 0}>

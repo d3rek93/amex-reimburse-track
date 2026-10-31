@@ -68,15 +68,3 @@ jobs:
 # rerun 1793201022
 # rerun 1793201067
 # rerun 1793201250
-      - name: App note dates vs bank dates
-        run: |
-          ref=$(sed -n 's/^project_id = "\(.*\)"/\1/p' supabase/config.toml)
-          q() {
-            curl -s -X POST "https://api.supabase.com/v1/projects/$ref/database/query" \
-              -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" -H "Content-Type: application/json" \
-              -d "$(jq -n --arg q "$1" '{query: $q}')"
-          }
-          echo "::warning::days before app date per amount: $(q "select a.n as app_note, array_agg(e.date - a.d order by e.date) as day_gaps from (values ('606355', 447.20, date '2026-10-29'), ('606439', 154.30, date '2026-10-30'), ('606440', 87.80, date '2026-10-30'), ('606441', 540.31, date '2026-10-30')) a(n, amt, d) left join expenses e on e.amount_eur = a.amt and e.date between a.d - 90 and a.d + 5 group by a.n" | jq -c '.')"
-          echo "::warning::statement note date vs line count for 6063xx-6064xx: $(q "select count(*) from claim_lines where note_id between '606300' and '606500'" | jq -c '.')"
-          echo "::warning::recent statement: gap between note number order and dates: $(q "select note_id, line_date, payment_date from claim_lines order by payment_date desc, note_id desc limit 6" | jq -c '[.[] | {n: .note_id, gap: ((.payment_date | strptime(\"%Y-%m-%d\") | mktime) - (.line_date | strptime(\"%Y-%m-%d\") | mktime)) / 86400}]')"
-# rerun app-dates
