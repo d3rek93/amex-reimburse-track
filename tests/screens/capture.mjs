@@ -52,7 +52,6 @@ for (const [device, viewport] of [["desktop", { width: 1280, height: 900 }], ["m
   page.on("pageerror", (e) => errors.push(`${device} ${page.url()}: ${e.message}`));
   page.on("console", (m) => m.type() === "error" && errors.push(`${device} console: ${m.text()}`));
   for (const [name, path] of pages) {
-    if (device === "mobile" && !["dashboard", "reconcile-review", "reconcile-unmatched", "expenses"].includes(name)) continue;
     await page.goto(base + path, { waitUntil: "networkidle" });
     await page.waitForTimeout(400);
     if (name === "reconcile-unmatched") {
@@ -67,8 +66,12 @@ for (const [device, viewport] of [["desktop", { width: 1280, height: 900 }], ["m
       const first = page.locator("main button[aria-expanded]").nth(1);
       if (await first.count()) await first.click();
     }
+    if (device === "mobile") {
+      const w = await page.evaluate(() => document.documentElement.scrollWidth);
+      if (w > 391) errors.push(`mobile ${name}: page is ${w}px wide`);
+    }
     await page.screenshot({ path: `${out}/${device}-${name}.png`, fullPage: true });
-    if (name === "reconcile-unmatched" && device === "desktop") {
+    if (name === "reconcile-unmatched") {
       await page.getByRole("checkbox").last().click();
       const pay = page.getByRole("button", { name: "Payée autrement…" });
       if (await pay.count()) {
@@ -78,7 +81,7 @@ for (const [device, viewport] of [["desktop", { width: 1280, height: 900 }], ["m
         await page.keyboard.press("Escape");
       }
     }
-    if (name === "dashboard" && device === "desktop") {
+    if (name === "dashboard") {
       const all = page.getByRole("button", { name: "Depuis le début" });
       if (await all.count()) {
         await all.click();
@@ -87,7 +90,7 @@ for (const [device, viewport] of [["desktop", { width: 1280, height: 900 }], ["m
         await page.getByRole("button", { name: "3 derniers mois" }).click();
       }
     }
-    if (name === "reconcile-disputes" && device === "desktop") {
+    if (name === "reconcile-disputes") {
       const prep = page.getByRole("button", { name: "Préparer le mail", exact: true }).first();
       if (await prep.count()) {
         await prep.click();
@@ -96,7 +99,7 @@ for (const [device, viewport] of [["desktop", { width: 1280, height: 900 }], ["m
         await page.keyboard.press("Escape");
       }
     }
-    if (name === "notes" && device === "desktop") {
+    if (name === "notes") {
       const row = page.locator('tr[role="button"]').first();
       if (await row.count()) {
         await row.click();
@@ -105,7 +108,7 @@ for (const [device, viewport] of [["desktop", { width: 1280, height: 900 }], ["m
         await page.keyboard.press("Escape");
       }
     }
-    if (name === "reconcile-review" && device === "desktop") {
+    if (name === "reconcile-review") {
       const other = page.getByRole("button", { name: "Autre dépense…" }).first();
       if (await other.count()) {
         await other.click();
