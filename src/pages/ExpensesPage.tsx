@@ -131,15 +131,17 @@ export default function ExpensesPage() {
                     </div>
                     <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                       <ExpenseStatusPair status={st} receivedOn={received(e.id)} />
-                      {canRefund(e.id) && (
-                        <Button size="sm" variant="ghost" className="h-7 ml-auto" onClick={() => setRefunding(e.id)}>
-                          Remboursée…
-                        </Button>
-                      )}
-                      <label className="flex items-center gap-2 text-muted-foreground">
-                        Perso
-                        <Switch checked={e.is_personal} onCheckedChange={(v) => void togglePersonal(e.id, v)} />
-                      </label>
+                      <div className="ml-auto flex flex-col items-end gap-1">
+                        <label className="flex items-center gap-2 text-muted-foreground">
+                          Perso
+                          <Switch checked={e.is_personal} onCheckedChange={(v) => void togglePersonal(e.id, v)} />
+                        </label>
+                        {canRefund(e.id) && (
+                          <Button size="sm" variant="ghost" className="h-7 -mr-3 text-muted-foreground" onClick={() => setRefunding(e.id)}>
+                            Remboursée…
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   </li>
                 );

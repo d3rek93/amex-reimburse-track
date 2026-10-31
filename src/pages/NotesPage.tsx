@@ -126,7 +126,7 @@ function Batch({ batch, ledger, onOpen }: { batch: BatchView; ledger: Ledger; on
                 ? "Virement non trouvé"
                 : ""}
         </span>
-        <span className="w-24 text-right tabular-nums font-medium">{eur(batch.linesTotal)}</span>
+        <span className="ml-auto sm:ml-0 w-24 text-right tabular-nums font-medium">{eur(batch.linesTotal)}</span>
       </button>
       {mismatch && (
         <p className="px-4 pb-2 text-sm text-warning">
