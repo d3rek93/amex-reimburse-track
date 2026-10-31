@@ -77,3 +77,4 @@ jobs:
               -d "$(jq -n --arg q "$1" '{query: $q}')"
           }
           q "select b.ref, b.payment_date, b.declared_total, count(l.id) as notes, sum(l.amount_eur) as lines_total, min(l.line_date) as first_note, max(l.line_date) as last_note, (select string_agg(t.date::text || ' ' || t.amount_eur::text, ', ') from jetfly_transfers t where t.date between b.payment_date - 10 and b.payment_date + 10 and not coalesce(t.ignored, false)) as transfers_near from claim_batches b left join claim_lines l on l.batch_ref = b.ref where b.ref like 'APP-%' group by b.id order by b.payment_date desc" | jq -c '.[]' | while read -r r; do echo "::warning::$r"; done
+# rerun app-pairing

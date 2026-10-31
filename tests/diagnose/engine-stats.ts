@@ -77,3 +77,20 @@ const lastStatement = r.batches.map((b) => b.paymentDate).sort().pop() ?? "";
 const via = [...alloc.byLine.values()].reduce<Record<string, number>>((a, x) => ((a[x.via] = (a[x.via] ?? 0) + 1), a), {});
 const unalloc = alloc.unallocated.map((id) => tr.find((t) => t.id === id)!);
 console.log(`::warning::ALLOC lines reimbursed by way: ${JSON.stringify(via)}; bank transfers explained: ${alloc.bankAllocated.length}; unallocated: ${unalloc.length} (inside last statement ${lastStatement.slice(0, 7)}: ${unalloc.filter((t) => t.date <= lastStatement).length}, after: ${unalloc.filter((t) => t.date > lastStatement).length}); unallocated by month: ${JSON.stringify(unalloc.reduce<Record<string, number>>((a, t) => ((a[t.date.slice(0, 7)] = (a[t.date.slice(0, 7)] ?? 0) + 1), a), {}))}`);
+
+// Payments read from the Jetfly app: which transfer, and how each note paired.
+const trById = new Map(transfers.map((t) => [String(t.id), t]));
+for (const b of r.batches.filter((x) => x.ref.startsWith("APP-"))) {
+  const notes = [...new Set(claims.filter((l) => l.batch_ref === b.ref).map((l) => String(l.note_id)))].map((n) => {
+    const c = claimById.get(n)!;
+    const m = r.matches.find((x) => x.noteIds.includes(n));
+    const s = r.suggestions.filter((x) => x.noteIds.includes(n));
+    return {
+      n, date: c.date, amount: c.amount,
+      match: m ? `${m.type}/${m.auto ? "auto" : "user"} -> ${m.lineIds.map((id) => `${lineById.get(id)?.date} ${lineById.get(id)?.amount_eur}`).join("+")}` : null,
+      suggestions: s.map((x) => `${x.type} -> ${x.lineIds.map((id) => `${lineById.get(id)?.date} ${lineById.get(id)?.amount_eur}`).join("+")}`),
+    };
+  });
+  const t = b.transferId ? trById.get(b.transferId) : null;
+  console.log(`::warning::${b.ref} total ${b.total} transfer ${t ? `${t.date} ${t.amount_eur}` : "none"} notes ${JSON.stringify(notes)}`);
+}
