@@ -201,7 +201,8 @@ export function DisputesTab({ ledger }: { ledger: Ledger }) {
         </p>
         {unsent.length > 0 && chosen.length === 0 && (
           <Button variant="outline" size="sm" onClick={() => setMailFor(unsent)}>
-            <Mail className="h-4 w-4 mr-2" /> Préparer le mail des réclamations non envoyées ({unsent.length})
+            <Mail className="h-4 w-4 mr-2" /> <span className="sm:hidden">Mail des non envoyées ({unsent.length})</span>
+            <span className="hidden sm:inline">Préparer le mail des réclamations non envoyées ({unsent.length})</span>
           </Button>
         )}
         {chosen.length > 0 && (

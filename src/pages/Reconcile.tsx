@@ -186,14 +186,14 @@ function Review({ ledger }: { ledger: Ledger }) {
         >
           <div className="rounded-lg border bg-card divide-y">
             {credits.map((e) => (
-              <div key={e.id} className="flex flex-wrap items-center gap-3 px-4 py-2.5 text-sm">
+              <div key={e.id} className="grid grid-cols-[3.5rem_minmax(0,1fr)_auto] sm:flex items-center gap-x-3 gap-y-1.5 px-4 py-2.5 text-sm">
                 <span className="w-14 shrink-0 text-muted-foreground tabular-nums">{shortDate(e.date)}</span>
-                <span className="flex-1 min-w-[12rem] truncate">
+                <span className="flex-1 min-w-0 truncate">
                   {e.description.replace(/^Remboursement - /, "")}
                   <span className="text-muted-foreground"> · {e.source}</span>
                 </span>
                 <span className="tabular-nums font-medium">{eur(e.amount_eur)}</span>
-                <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => run(e.id, () => base.setPersonal([e.id], true), "Classé en offre AMEX")}>
+                <Button size="sm" variant="outline" className="col-start-2 col-span-2 justify-self-start" disabled={busy !== null} onClick={() => run(e.id, () => base.setPersonal([e.id], true), "Classé en offre AMEX")}>
                   Offre AMEX, à moi
                 </Button>
               </div>
@@ -209,11 +209,11 @@ function Review({ ledger }: { ledger: Ledger }) {
         >
           <div className="rounded-lg border border-destructive/40 bg-card divide-y">
             {absent.map((t) => (
-              <div key={t.id} className="flex flex-wrap items-center gap-3 px-4 py-2.5 text-sm">
+              <div key={t.id} className="grid grid-cols-[3.5rem_minmax(0,1fr)_auto] sm:flex items-center gap-x-3 gap-y-1.5 px-4 py-2.5 text-sm">
                 <span className="w-14 shrink-0 text-muted-foreground tabular-nums">{shortDate(t.date)}</span>
-                <span className="flex-1 min-w-[12rem] truncate">{t.label}</span>
+                <span className="flex-1 min-w-0 truncate">{t.label}</span>
                 <span className="tabular-nums font-medium">{eur(t.amount_eur)}</span>
-                <Button size="sm" variant="ghost" disabled={busy !== null} onClick={() => void ignore(t)}>
+                <Button size="sm" variant="ghost" className="col-start-2 col-span-2 justify-self-start -ml-3 sm:ml-0" disabled={busy !== null} onClick={() => void ignore(t)}>
                   Pas un remboursement de frais
                 </Button>
               </div>
@@ -371,11 +371,11 @@ function Review({ ledger }: { ledger: Ledger }) {
         >
           <div className="rounded-lg border bg-card divide-y">
             {toSplit.map((t) => (
-              <div key={t.id} className="flex flex-wrap items-center gap-3 px-4 py-2.5 text-sm">
+              <div key={t.id} className="grid grid-cols-[3.5rem_minmax(0,1fr)_auto] sm:flex items-center gap-x-3 gap-y-1.5 px-4 py-2.5 text-sm">
                 <span className="w-14 shrink-0 text-muted-foreground tabular-nums">{shortDate(t.date)}</span>
-                <span className="flex-1 min-w-[12rem] truncate">{t.label}</span>
+                <span className="flex-1 min-w-0 truncate">{t.label}</span>
                 <span className="tabular-nums font-medium">{eur(t.amount_eur)}</span>
-                <Button size="sm" variant="ghost" disabled={busy !== null} onClick={() => void ignore(t)}>
+                <Button size="sm" variant="ghost" className="col-start-2 col-span-2 justify-self-start -ml-3 sm:ml-0" disabled={busy !== null} onClick={() => void ignore(t)}>
                   Pas un remboursement de frais
                 </Button>
               </div>
@@ -391,11 +391,11 @@ function Review({ ledger }: { ledger: Ledger }) {
         >
           <div className="rounded-lg border bg-card divide-y">
             {personal.map((e) => (
-              <div key={e.id} className="flex items-center gap-3 px-4 py-2.5 text-sm">
+              <div key={e.id} className="grid grid-cols-[3.5rem_minmax(0,1fr)_auto] sm:flex items-center gap-x-3 gap-y-1.5 px-4 py-2.5 text-sm">
                 <span className="w-14 shrink-0 text-muted-foreground tabular-nums">{shortDate(e.date)}</span>
                 <span className="flex-1 min-w-0 truncate">{e.description}</span>
                 <span className="tabular-nums font-medium">{eur(e.amount_eur)}</span>
-                <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => run(e.id, () => actions.setPersonal([e.id], true))}>
+                <Button size="sm" variant="outline" className="col-start-2 col-span-2 justify-self-start" disabled={busy !== null} onClick={() => run(e.id, () => actions.setPersonal([e.id], true))}>
                   Marquer perso
                 </Button>
               </div>
@@ -412,11 +412,11 @@ function Review({ ledger }: { ledger: Ledger }) {
         <Section title="Virements écartés" hint="Marqués « pas un remboursement de frais » : ils ne comptent ni dans les remboursements, ni dans les contrôles.">
           <div className="rounded-lg border bg-card divide-y">
             {ignored.map((t) => (
-              <div key={t.id} className="flex flex-wrap items-center gap-3 px-4 py-2 text-sm">
+              <div key={t.id} className="grid grid-cols-[3.5rem_minmax(0,1fr)_auto] sm:flex items-center gap-x-3 gap-y-1.5 px-4 py-2 text-sm">
                 <span className="w-14 shrink-0 text-muted-foreground tabular-nums">{shortDate(t.date)}</span>
-                <span className="flex-1 min-w-[12rem] truncate text-muted-foreground">{t.label}</span>
+                <span className="flex-1 min-w-0 truncate text-muted-foreground">{t.label}</span>
                 <span className="tabular-nums">{eur(t.amount_eur)}</span>
-                <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => run(t.id, () => base.ignoreTransfer(t.id, false), "Virement rétabli")}>
+                <Button size="sm" variant="outline" className="col-start-2 col-span-2 justify-self-start" disabled={busy !== null} onClick={() => run(t.id, () => base.ignoreTransfer(t.id, false), "Virement rétabli")}>
                   Rétablir
                 </Button>
               </div>
@@ -463,20 +463,20 @@ function Choice({
           const e = ledger.expenseById.get(m.lineIds[0]);
           if (!e) return null;
           return (
-            <div key={e.id} className="flex items-center gap-3 px-4 py-2 text-sm">
+            <div key={e.id} className="grid grid-cols-[3.5rem_minmax(0,1fr)_auto] sm:flex items-center gap-x-3 gap-y-1.5 px-4 py-2 text-sm">
               <span className="w-14 shrink-0 text-muted-foreground tabular-nums">{shortDate(e.date)}</span>
               <span className="flex-1 min-w-0 truncate">
                 {e.description}
                 <span className="text-muted-foreground"> · {e.source}</span>
               </span>
-              <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => run(m.lineIds[0], () => actions.confirm(m), "Associées")}>
+              <Button size="sm" variant="outline" className="col-start-2 col-span-2 justify-self-start" disabled={busy !== null} onClick={() => run(m.lineIds[0], () => actions.confirm(m), "Associées")}>
                 C'est celle-ci
               </Button>
             </div>
           );
         })}
       </div>
-      <div className="border-t px-4 py-2 flex justify-end gap-2">
+      <div className="border-t px-2 sm:px-4 py-2 flex flex-wrap justify-end gap-x-2">
         <Button size="sm" variant="ghost" disabled={busy !== null} onClick={onOther}>
           Autre dépense…
         </Button>
@@ -551,7 +551,7 @@ function Unmatched({ ledger }: { ledger: Ledger }) {
           aria-label="Chercher"
         />
       </div>
-      <div className="grid lg:grid-cols-2 gap-6 items-start">
+      <div className="grid lg:grid-cols-2 gap-6 items-start [&>*]:min-w-0">
         <Column title={`Notes Jetfly sans dépense (${notes.length})`} empty="Toutes les notes ont leur dépense.">
           {notes.map((c) => (
             <SelectableRow
@@ -604,8 +604,8 @@ function Unmatched({ ledger }: { ledger: Ledger }) {
         }}
       />
       {(notesSel.size > 0 || expSel.size > 0) && (
-        <div className="fixed bottom-0 inset-x-0 z-30 border-t bg-card/95 backdrop-blur">
-          <div className="mx-auto max-w-6xl px-4 py-3 flex flex-wrap items-center gap-3 text-sm">
+        <div className="fixed bottom-[calc(3.5rem+env(safe-area-inset-bottom))] md:bottom-0 inset-x-0 z-30 border-t bg-card/95 backdrop-blur shadow-[0_-4px_12px_rgba(0,0,0,0.06)]">
+          <div className="mx-auto max-w-6xl px-4 py-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
             <span className="tabular-nums">
               {notesSel.size} note{notesSel.size > 1 ? "s" : ""} : <strong>{eur(notesTotal)}</strong>
             </span>
@@ -702,12 +702,12 @@ function HistoryNotice({ ledger, hidden }: { ledger: Ledger; hidden: number }) {
 
 function Column({ title, empty, children }: { title: string; empty: string; children: ReactNode[] }) {
   return (
-    <section>
+    <section className="min-w-0">
       <h2 className="text-base font-semibold mb-2">{title}</h2>
       {children.length === 0 ? (
         <p className="text-sm text-muted-foreground">{empty}</p>
       ) : (
-        <div className="rounded-lg border bg-card divide-y max-h-[65vh] overflow-y-auto">{children}</div>
+        <div className="rounded-lg border bg-card divide-y max-h-[65vh] overflow-y-auto overflow-x-hidden">{children}</div>
       )}
     </section>
   );

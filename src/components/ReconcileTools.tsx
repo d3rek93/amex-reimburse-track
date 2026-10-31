@@ -244,11 +244,11 @@ export function SelectableRow({
   amount: number;
 }) {
   return (
-    <label className={cn("flex items-center gap-3 px-4 py-2 text-sm cursor-pointer hover:bg-muted/50", checked && "bg-primary/5")}>
+    <label className={cn("flex items-center gap-3 px-4 py-2.5 md:py-2 text-sm cursor-pointer hover:bg-muted/50 min-w-0", checked && "bg-primary/5")}>
       <Checkbox checked={checked} onCheckedChange={onToggle} />
       <span className="w-14 shrink-0 text-muted-foreground tabular-nums">{shortDate(date)}</span>
       <span className="flex-1 min-w-0 truncate">{label}</span>
-      <span className="tabular-nums font-medium">{eur(amount)}</span>
+      <span className="shrink-0 tabular-nums font-medium">{eur(amount)}</span>
     </label>
   );
 }

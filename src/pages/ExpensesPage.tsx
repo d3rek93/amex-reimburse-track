@@ -124,12 +124,12 @@ export default function ExpensesPage() {
                       <span className="flex-1 min-w-0 truncate">{e.description}</span>
                       <span className="tabular-nums font-medium">{eur(e.amount_eur)}</span>
                     </div>
-                    <div className="flex items-center gap-3 text-muted-foreground">
+                    <div className="flex flex-wrap items-center gap-x-3 text-muted-foreground">
                       <span className="tabular-nums">{dayDate(e.date)}</span>
                       <span>{e.source ?? "AMEX"}</span>
                       {match && <span className="tabular-nums">note {match.noteIds.join(", ")}</span>}
                     </div>
-                    <div className="flex items-center justify-between gap-3">
+                    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                       <ExpenseStatusPair status={st} receivedOn={received(e.id)} />
                       {canRefund(e.id) && (
                         <Button size="sm" variant="ghost" className="h-7 ml-auto" onClick={() => setRefunding(e.id)}>

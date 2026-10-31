@@ -93,9 +93,9 @@ function Content({ ledger }: { ledger: Ledger }) {
   ];
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-8 md:space-y-10">
       <section className="space-y-2 max-w-3xl">
-        <p className="text-3xl md:text-4xl font-semibold tracking-tight leading-tight">
+        <p className="text-2xl md:text-4xl font-semibold tracking-tight leading-tight">
           {owed > 0.005 ? <>Jetfly te doit {eur(owed)}</> : <>Jetfly ne te doit plus rien</>}
         </p>
         <p className="text-muted-foreground">
@@ -131,16 +131,16 @@ function Content({ ledger }: { ledger: Ledger }) {
 
       <section>
         <h2 className="text-base font-semibold mb-3">À traiter</h2>
-        <div className={cn("grid sm:grid-cols-2 gap-px rounded-lg border bg-border overflow-hidden", tasks.length > 4 ? "lg:grid-cols-5" : "lg:grid-cols-4")}>
+        <div className={cn("grid grid-cols-2 gap-px rounded-lg border bg-border overflow-hidden", tasks.length > 4 ? "lg:grid-cols-5" : "lg:grid-cols-4")}>
           {tasks.map((t) => (
             <Link
               key={t.label}
               to={t.to}
-              className="bg-card p-4 hover:bg-muted/60 focus-visible:bg-muted/60 outline-none transition-colors"
+              className="bg-card p-3 md:p-4 hover:bg-muted/60 last:odd:col-span-2 lg:last:odd:col-span-1 focus-visible:bg-muted/60 outline-none transition-colors"
             >
               <p className={cn("text-2xl font-semibold tabular-nums", t.n === 0 && "text-muted-foreground")}>{t.n}</p>
-              <p className="font-medium">{t.label}</p>
-              <p className="text-sm text-muted-foreground">{t.hint}</p>
+              <p className="font-medium text-sm md:text-base leading-snug">{t.label}</p>
+              <p className="hidden sm:block text-sm text-muted-foreground">{t.hint}</p>
             </Link>
           ))}
         </div>
@@ -262,12 +262,13 @@ function MonthSummary({ ledger }: { ledger: Ledger }) {
     <section>
       <div className="flex flex-wrap items-center justify-between gap-3 mb-3 max-w-4xl">
         <h2 className="text-base font-semibold">Par mois</h2>
-        <div className="flex flex-wrap gap-1" role="group" aria-label="Période">
+        <div className="-mx-4 px-4 w-[calc(100%+2rem)] sm:w-auto sm:mx-0 sm:px-0 flex gap-1 overflow-x-auto sm:flex-wrap [scrollbar-width:none]" role="group" aria-label="Période">
           {PERIODS.map(([value, label]) => (
             <Button
               key={value}
               size="sm"
               variant={period === value ? "secondary" : "ghost"}
+              className="shrink-0"
               aria-pressed={period === value}
               onClick={() => setPeriod(value)}
             >
@@ -285,7 +286,8 @@ function MonthSummary({ ledger }: { ledger: Ledger }) {
             {total.count} dépense{total.count > 1 ? "s" : ""} pro pour {eur(total.spent)} : {share(total.matched)} % remboursés et
             validés, {share(total.received)} % remboursés en attente du relevé, {share(total.pending)} % pas encore remboursés.
           </p>
-          <div className="overflow-x-auto max-w-4xl">
+          <MonthCards rows={rows} years={years} byYear={byYear} yearTotal={yearTotal} name={name} total={total} />
+          <div className="hidden md:block overflow-x-auto max-w-4xl">
             <table className="w-full text-sm min-w-[36rem]">
               <thead className="text-muted-foreground">
                 <tr className="border-b">
@@ -329,5 +331,64 @@ function MonthSummary({ ledger }: { ledger: Ledger }) {
         </>
       )}
     </section>
+  );
+}
+
+/** Phones: one card per month, with a bar split into validated / paid back / waiting. */
+function MonthCards({
+  rows,
+  years,
+  byYear,
+  yearTotal,
+  name,
+  total,
+}: {
+  rows: [string, Totals][];
+  years: string[];
+  byYear: boolean;
+  yearTotal: (y: string) => Totals;
+  name: (key: string) => string;
+  total: Totals;
+}) {
+  const card = (key: string, label: string, m: Totals, strong = false) => {
+    const pct = (n: number) => (m.spent > 0 ? `${(100 * n) / m.spent}%` : "0%");
+    return (
+      <div key={key} className={cn("px-4 py-3", strong && "bg-muted/40")}>
+        <div className="flex items-baseline justify-between gap-3">
+          <span className={cn("text-sm", strong ? "font-semibold" : "font-medium")}>{label}</span>
+          <span className={cn("tabular-nums", strong ? "font-semibold" : "font-medium")}>{eur(m.spent)}</span>
+        </div>
+        <div className="mt-2 flex h-2 rounded-full overflow-hidden bg-muted" aria-hidden>
+          <div className="bg-success" style={{ width: pct(m.matched) }} />
+          <div className="bg-success/40" style={{ width: pct(m.received) }} />
+          <div className="bg-warning" style={{ width: pct(m.pending) }} />
+        </div>
+        <dl className="mt-1.5 grid grid-cols-3 gap-2 text-xs text-muted-foreground">
+          <div>
+            <dt>Validées</dt>
+            <dd className="tabular-nums text-foreground">{eur(m.matched)}</dd>
+          </div>
+          <div>
+            <dt>Relevé à venir</dt>
+            <dd className="tabular-nums text-foreground">{eur(m.received)}</dd>
+          </div>
+          <div>
+            <dt>En attente</dt>
+            <dd className={cn("tabular-nums", m.pending > 0.005 ? "text-warning font-medium" : "text-foreground")}>{eur(m.pending)}</dd>
+          </div>
+        </dl>
+      </div>
+    );
+  };
+  return (
+    <div className="md:hidden rounded-lg border bg-card divide-y">
+      {rows.length > 1 && card("total", "Total de la période", total, true)}
+      {years.map((y) => (
+        <Fragment key={y}>
+          {byYear && card(`y${y}`, y, yearTotal(y), true)}
+          {rows.filter(([k]) => k.startsWith(y)).map(([k, m]) => card(k, name(k), m))}
+        </Fragment>
+      ))}
+    </div>
   );
 }

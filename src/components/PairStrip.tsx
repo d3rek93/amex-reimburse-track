@@ -104,7 +104,7 @@ export function PairStrip({
         </Side>
       </div>
       {footer && (
-        <div className={cn("border-t px-4 flex flex-wrap items-center gap-2", dense ? "py-1" : "py-2.5")}>{footer}</div>
+        <div className={cn("border-t px-4 flex flex-wrap items-center gap-2 [&>span:first-child]:basis-full sm:[&>span:first-child]:basis-auto", dense ? "py-1" : "py-2.5")}>{footer}</div>
       )}
     </div>
   );

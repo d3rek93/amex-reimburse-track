@@ -111,7 +111,7 @@ function Batch({ batch, ledger, onOpen }: { batch: BatchView; ledger: Ledger; on
         aria-expanded={open}
         className="w-full flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-left text-sm hover:bg-muted/40 focus-visible:bg-muted/40 outline-none"
       >
-        <span className="w-20 tabular-nums text-muted-foreground">{dayDate(batch.paymentDate)}</span>
+        <span className="w-16 sm:w-20 tabular-nums text-muted-foreground">{dayDate(batch.paymentDate)}</span>
         <span className="flex-1 min-w-[10rem]">
           {notes.length} note{notes.length > 1 ? "s" : ""}
           {issues > 0 && <span className="text-primary"> dont {issues} à traiter</span>}
@@ -134,7 +134,7 @@ function Batch({ batch, ledger, onOpen }: { batch: BatchView; ledger: Ledger; on
         </p>
       )}
       {open && (
-        <div className="px-4 pb-3">
+        <div className="px-2 sm:px-4 pb-3">
           <table className="w-full text-sm">
             <tbody className="divide-y">
               {notes.map((c) =>
@@ -156,9 +156,9 @@ function Batch({ batch, ledger, onOpen }: { batch: BatchView; ledger: Ledger; on
                       ledger.noteStatus.get(c.noteId) === "to_review" && "bg-primary/5",
                     )}
                   >
-                    <td className="py-1.5 pl-2 pr-3 w-20 tabular-nums text-muted-foreground">{shortDate(c.date)}</td>
-                    <td className="py-1.5 pr-3 tabular-nums text-muted-foreground w-20">{c.noteId}</td>
-                    <td className="py-1.5 pr-3">{categoryLabel(c.category, c.subcategory)}</td>
+                    <td className="hidden sm:table-cell py-1.5 pl-2 pr-3 w-20 tabular-nums text-muted-foreground">{shortDate(c.date)}</td>
+                    <td className="py-1.5 pl-2 sm:pl-0 pr-3 tabular-nums text-muted-foreground w-16 sm:w-20">{c.noteId}</td>
+                    <td className="py-1.5 pr-3 break-words">{categoryLabel(c.category, c.subcategory)}</td>
                     <td className="py-1.5 pr-3">
                       <NoteStatusLabel status={ledger.noteStatus.get(c.noteId)!} />
                     </td>
@@ -211,12 +211,12 @@ function Transfers({ ledger }: { ledger: Ledger }) {
               <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
                 <span className="w-20 shrink-0 tabular-nums text-muted-foreground">{dayDate(t.date)}</span>
                 <span className="font-medium tabular-nums">{eur(t.amount_eur)}</span>
-                <span className={cn("flex-1 min-w-[14rem]", tone)}>
+                <span className={cn("basis-full sm:basis-auto sm:flex-1 sm:min-w-[14rem]", tone)}>
                   {batch ? `Paiement ${batch.ref} du ${shortDate(batch.paymentDate)}, ${batch.noteIds.length} note${batch.noteIds.length > 1 ? "s" : ""}` : label}
                 </span>
               </div>
               {t.status === "bank" && paid.length > 0 && (
-                <ul className="mt-1 ml-[5.75rem] space-y-0.5 text-muted-foreground">
+                <ul className="mt-1 sm:ml-[5.75rem] space-y-0.5 text-muted-foreground">
                   {paid.map((e) => (
                     <li key={e!.id} className="flex gap-3">
                       <span className="w-14 tabular-nums">{shortDate(e!.date)}</span>
