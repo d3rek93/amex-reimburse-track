@@ -352,3 +352,25 @@ test("advance: money received but not yet tied to expenses is not owed twice", a
   assert.equal(p.stillOwed, 200);
   assert.equal(p.position, 2200);
 });
+
+test("note read from the Jetfly app (submission date) matches an expense weeks earlier", () => {
+  const hotel = bank("2026-10-08", 447.2, "NOVOTEL LYON");
+  const other = bank("2026-10-28", 87.8, "TAXI G7");
+  const r = reconcile({
+    lines: [hotel, other],
+    claimLines: [
+      note("606355", "2026-10-29", "", "", 447.2, "APP-2026-10-30-53520", "2026-10-30"),
+      note("606440", "2026-10-30", "", "", 87.8, "APP-2026-10-30-53520", "2026-10-30"),
+    ],
+  });
+  const claims = buildClaims([note("606355", "2026-10-29", "", "", 447.2, "APP-2026-10-30-53520", "2026-10-30")]);
+  assert.equal(claims[0].provisional, true);
+  assert.deepEqual(
+    r.matches.map((m) => [m.noteIds[0], m.lineIds[0]]).sort(),
+    [["606355", hotel.id], ["606440", other.id]],
+  );
+});
+
+test("statement notes are not provisional", () => {
+  assert.equal(buildClaims([note("100001", "2026-09-02", "Hotel", "Night", 98)])[0].provisional, false);
+});

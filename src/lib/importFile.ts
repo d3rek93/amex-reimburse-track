@@ -22,7 +22,10 @@ export async function importFile(file: File): Promise<ImportOutcome> {
     const saved = await saveClaimStatement(lines, batches);
     return {
       title: `Relevé Jetfly : ${file.name}`,
-      detail: `${plural(saved.added, "note")} ajoutée${saved.added > 1 ? "s" : ""}, ${saved.skipped} déjà connue${saved.skipped > 1 ? "s" : ""}`,
+      detail:
+        `${plural(saved.added, "note")} ajoutée${saved.added > 1 ? "s" : ""}, ${saved.skipped} déjà connue${saved.skipped > 1 ? "s" : ""}` +
+        (saved.appConfirmed ? `. ${plural(saved.appConfirmed, "note")} de l'app Jetfly confirmée${saved.appConfirmed > 1 ? "s" : ""}` : "") +
+        (saved.appCorrected ? `. ${plural(saved.appCorrected, "note")} de l'app Jetfly corrigée${saved.appCorrected > 1 ? "s" : ""} par le relevé` : ""),
     };
   }
 

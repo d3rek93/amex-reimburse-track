@@ -28,6 +28,7 @@ const pages = [
   ["reconcile-disputes", "/reconcile?tab=disputes"],
   ["expenses", "/expenses"],
   ["notes", "/notes"],
+  ["notes-transfers", "/notes?tab=transfers"],
   ["advance", "/advance"],
 ];
 
@@ -105,6 +106,18 @@ for (const [device, viewport] of [["desktop", { width: 1280, height: 900 }], ["m
         await row.click();
         await page.waitForTimeout(300);
         await page.screenshot({ path: `${out}/${device}-note-details.png` });
+        await page.keyboard.press("Escape");
+      }
+    }
+    if (name === "notes-transfers") {
+      const add = page.getByRole("button", { name: "Ajouter depuis l'app Jetfly" });
+      if (await add.count()) {
+        await add.click();
+        await page.locator("summary").click();
+        await page.locator("textarea").fill("October 2026\n30 Oct\n€1,229.61\n#00606355\n29 Oct 2026\n€447.20\n#00606439\n30 Oct 2026\n€154.30\n#00606440\n30 Oct 2026\n€87.80\n#00606441\n30 Oct 2026\n€540.31\nTransfer details\n29 Oct €265.00");
+        await page.getByRole("button", { name: "Lire" }).click();
+        await page.waitForTimeout(400);
+        await page.screenshot({ path: `${out}/${device}-app-import.png` });
         await page.keyboard.press("Escape");
       }
     }

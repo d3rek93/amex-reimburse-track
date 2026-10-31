@@ -3,6 +3,8 @@ import { Loader2, Search } from "lucide-react";
 import { AppLayout } from "@/components/AppLayout";
 import { NoteStatusLabel } from "@/components/StatusLabel";
 import { NoteDetails } from "@/components/NoteDetails";
+import { JetflyAppImport } from "@/components/JetflyAppImport";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useSearchParams } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -115,7 +117,7 @@ function Batch({ batch, ledger, onOpen }: { batch: BatchView; ledger: Ledger; on
         <span className="flex-1 min-w-[10rem]">
           {notes.length} note{notes.length > 1 ? "s" : ""}
           {issues > 0 && <span className="text-primary"> dont {issues} à traiter</span>}
-          <span className="text-muted-foreground"> · {batch.ref}</span>
+          <span className="text-muted-foreground"> · {batch.provisional ? "app Jetfly, relevé à venir" : batch.ref}</span>
         </span>
         <span className={cn("text-sm", batch.transfer ? "text-success" : batch.beforeHistory ? "text-muted-foreground" : "text-warning")}>
           {batch.transfer
@@ -191,6 +193,7 @@ const TRANSFER_STATUS: Record<TransferView["status"], [string, string]> = {
 /** Every Jetfly transfer received, and what it paid back. */
 function Transfers({ ledger }: { ledger: Ledger }) {
   const [limit, setLimit] = useState(40);
+  const [appOpen, setAppOpen] = useState(false);
   const batchOf = new Map(ledger.batches.filter((b) => b.transfer).map((b) => [b.transfer!.id, b]));
   const list = ledger.transferViews;
   if (list.length === 0) {
@@ -198,9 +201,15 @@ function Transfers({ ledger }: { ledger: Ledger }) {
   }
   return (
     <div className="space-y-3 max-w-4xl">
-      <p className="text-sm text-muted-foreground">
-        Virements de Jetfly arrivés sur ton compte Boursobank, du plus récent au plus ancien, avec ce qu'ils remboursent.
-      </p>
+      <div className="flex flex-wrap items-center gap-3">
+        <p className="text-sm text-muted-foreground flex-1 min-w-[14rem]">
+          Virements de Jetfly arrivés sur ton compte Boursobank, du plus récent au plus ancien, avec ce qu'ils remboursent.
+        </p>
+        <Button variant="outline" size="sm" onClick={() => setAppOpen(true)}>
+          Ajouter depuis l'app Jetfly
+        </Button>
+      </div>
+      <JetflyAppImport open={appOpen} onOpenChange={setAppOpen} />
       <div className="rounded-lg border bg-card divide-y">
         {list.slice(0, limit).map((t) => {
           const batch = batchOf.get(t.id);
@@ -212,7 +221,9 @@ function Transfers({ ledger }: { ledger: Ledger }) {
                 <span className="w-20 shrink-0 tabular-nums text-muted-foreground">{dayDate(t.date)}</span>
                 <span className="font-medium tabular-nums">{eur(t.amount_eur)}</span>
                 <span className={cn("basis-full sm:basis-auto sm:flex-1 sm:min-w-[14rem]", tone)}>
-                  {batch ? `Paiement ${batch.ref} du ${shortDate(batch.paymentDate)}, ${batch.noteIds.length} note${batch.noteIds.length > 1 ? "s" : ""}` : label}
+                  {batch
+                    ? `${batch.provisional ? "Lu dans l'app Jetfly" : `Paiement ${batch.ref} du ${shortDate(batch.paymentDate)}`}, ${batch.noteIds.length} note${batch.noteIds.length > 1 ? "s" : ""}${batch.provisional ? " (relevé à venir)" : ""}`
+                    : label}
                 </span>
               </div>
               {t.status === "bank" && paid.length > 0 && (

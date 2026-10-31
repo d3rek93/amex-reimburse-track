@@ -34,5 +34,5 @@ export const categoryLabel = (category: string, subcategory: string) => {
     "Uniform Dry cleaning": "Pressing",
     "JET A1 JET A1": "Jet A1",
   };
-  return map[`${category} ${subcategory}`.trim()] ?? ([category, subcategory].filter(Boolean).join(" – ") || "Note");
+  return map[`${category} ${subcategory}`.trim()] ?? ([category, subcategory].filter(Boolean).join(" – ") || "Note (app Jetfly)");
 };

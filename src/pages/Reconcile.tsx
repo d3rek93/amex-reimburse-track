@@ -367,7 +367,7 @@ function Review({ ledger }: { ledger: Ledger }) {
       {toSplit.length > 0 && (
         <Section
           title="Virements reçus, à répartir"
-          hint="Plusieurs combinaisons de dépenses donnent ce montant. Le prochain relevé Jetfly dira lesquelles il rembourse : rien à faire en attendant."
+          hint="Plusieurs combinaisons de dépenses donnent ce montant. Le prochain relevé Jetfly dira lesquelles il rembourse. Pour ne pas attendre : Importer, puis « Capture de l'app Jetfly » avec le virement déplié."
         >
           <div className="rounded-lg border bg-card divide-y">
             {toSplit.map((t) => (

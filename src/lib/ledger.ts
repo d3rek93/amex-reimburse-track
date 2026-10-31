@@ -11,6 +11,7 @@ import {
   allocateTransfers,
   learnRules,
   buildClaims,
+  isProvisionalBatch,
   merchantKey,
   reconcile,
   type BankLine,
@@ -62,6 +63,8 @@ export interface BatchView {
   noteIds: string[];
   /** Paid before the oldest Boursobank line on file: its transfer cannot be checked. */
   beforeHistory: boolean;
+  /** Read from the Jetfly app; the monthly statement will confirm or correct it. */
+  provisional: boolean;
 }
 
 /**
@@ -363,6 +366,9 @@ export function buildLedger(raw: RawData): Ledger {
     if (manuallyVoid.has(e.id)) status = "neutralized";
     else if (e.is_personal) status = e.amount_eur < 0 ? "gain" : "personal";
     else if (m?.disputeId) status = Math.abs(m.difference) >= 0.005 ? "disputed" : "validated";
+    else if (m && Math.abs(m.difference) < 0.005 && m.noteIds.every((n) => claimById.get(n)?.provisional))
+      // Paired through the Jetfly app: paid back, the statement will validate it.
+      status = "reimbursed";
     else if (m) status = Math.abs(m.difference) >= 0.005 ? "discrepancy" : "validated";
     else if (neutralized.has(e.id)) status = "neutralized";
     else if (paid && paid.transferId && absentTransfers.has(paid.transferId)) status = "no_note";
@@ -421,6 +427,7 @@ export function buildLedger(raw: RawData): Ledger {
       transfer: b.transferId ? transferById.get(b.transferId) ?? null : null,
       noteIds: [...new Set(claimLines.filter((l) => l.batchRef === b.ref).map((l) => l.noteId))],
       beforeHistory: !b.transferId && (!boursoStart || b.paymentDate < boursoStart),
+      provisional: isProvisionalBatch(b.ref),
     }))
     .sort((a, b) => b.paymentDate.localeCompare(a.paymentDate));
 
@@ -761,6 +768,9 @@ export function useLedgerActions() {
 export interface SaveSummary {
   added: number;
   skipped: number;
+  /** Statement imports: notes read earlier from the Jetfly app, now confirmed (same amount) or corrected. */
+  appConfirmed?: number;
+  appCorrected?: number;
 }
 
 export async function saveClaimStatement(lines: ParsedClaimLine[], batches: ParsedBatch[]): Promise<SaveSummary> {
@@ -797,7 +807,88 @@ export async function saveClaimStatement(lines: ParsedClaimLine[], batches: Pars
   );
   fail(error);
   const added = lines.filter((l) => !existing.has(key(l.noteId, l.batchRef, l.amount))).length;
-  return { added, skipped: lines.length - added };
+
+  // Notes read from the Jetfly app are replaced by the statement, which is authoritative.
+  const statementNotes = new Set(lines.filter((l) => !isProvisionalBatch(l.batchRef)).map((l) => l.noteId));
+  const provisional = (known ?? []).filter((k) => isProvisionalBatch(k.batch_ref) && statementNotes.has(k.note_id));
+  let appConfirmed = 0;
+  let appCorrected = 0;
+  if (provisional.length > 0) {
+    const net = new Map<string, number>();
+    for (const l of lines) net.set(l.noteId, (net.get(l.noteId) ?? 0) + l.amount);
+    for (const k of provisional) {
+      if (Math.abs((net.get(k.note_id) ?? 0) - Number(k.amount_eur)) < 0.005) appConfirmed += 1;
+      else appCorrected += 1;
+    }
+    const { error: delError } = await supabase
+      .from("claim_lines")
+      .delete()
+      .like("batch_ref", "APP-%")
+      .in("note_id", [...new Set(provisional.map((k) => k.note_id))]);
+    fail(delError);
+    await dropEmptyAppBatches();
+  }
+  return { added, skipped: lines.length - added, appConfirmed, appCorrected };
+}
+
+async function dropEmptyAppBatches() {
+  const [{ data: batches, error: e1 }, { data: used, error: e2 }] = await Promise.all([
+    supabase.from("claim_batches").select("id, ref").like("ref", "APP-%"),
+    supabase.from("claim_lines").select("batch_ref").like("batch_ref", "APP-%"),
+  ]);
+  fail(e1);
+  fail(e2);
+  const keep = new Set((used ?? []).map((u) => u.batch_ref));
+  const empty = (batches ?? []).filter((b) => !keep.has(b.ref)).map((b) => b.id);
+  if (empty.length > 0) fail((await supabase.from("claim_batches").delete().in("id", empty)).error);
+}
+
+/**
+ * Payments read from the Jetfly app, until the monthly statement replaces
+ * them. Notes already on a statement are skipped; a note read again replaces
+ * its earlier app reading.
+ */
+export async function saveAppPayments(payments: { date: string; total: number; notes: { noteId: string; date: string; amount: number }[] }[]): Promise<SaveSummary> {
+  const uid = await userId();
+  const noteIds = [...new Set(payments.flatMap((p) => p.notes.map((n) => n.noteId)))];
+  if (noteIds.length === 0) return { added: 0, skipped: 0 };
+  const { data: known, error } = await supabase.from("claim_lines").select("note_id, batch_ref").in("note_id", noteIds);
+  fail(error);
+  const onStatement = new Set((known ?? []).filter((k) => !isProvisionalBatch(k.batch_ref)).map((k) => k.note_id));
+  const fresh = payments
+    .map((p) => ({ ...p, notes: p.notes.filter((n) => !onStatement.has(n.noteId)) }))
+    .filter((p) => p.notes.length > 0);
+  const skipped = noteIds.filter((n) => onStatement.has(n)).length;
+  if (fresh.length === 0) return { added: 0, skipped };
+
+  // Re-reading a note replaces the earlier reading.
+  const reread = [...new Set(fresh.flatMap((p) => p.notes.map((n) => n.noteId)))];
+  fail((await supabase.from("claim_lines").delete().like("batch_ref", "APP-%").in("note_id", reread)).error);
+
+  const refOf = (p: { date: string; total: number }) => `APP-${p.date}-${Math.round(p.total * 100)}`;
+  fail(
+    (
+      await supabase.from("claim_batches").upsert(
+        fresh.map((p) => ({ user_id: uid, ref: refOf(p), payment_date: p.date, declared_total: p.total })),
+        { onConflict: "user_id,ref" },
+      )
+    ).error,
+  );
+  const rows = fresh.flatMap((p) =>
+    p.notes.map((n) => ({
+      user_id: uid,
+      note_id: n.noteId,
+      line_date: n.date,
+      category: "",
+      subcategory: "",
+      amount_eur: n.amount,
+      batch_ref: refOf(p),
+      payment_date: p.date,
+    })),
+  );
+  fail((await supabase.from("claim_lines").upsert(rows, { onConflict: "user_id,note_id,batch_ref,amount_eur" })).error);
+  await dropEmptyAppBatches();
+  return { added: rows.length, skipped };
 }
 
 /**

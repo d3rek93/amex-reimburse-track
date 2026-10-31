@@ -73,6 +73,8 @@ export interface Claim {
   cancelled: boolean;
   /** Note number this one cancels, or is cancelled by (Jetfly sometimes uses a new number). */
   cancelledWith?: string;
+  /** Read from the Jetfly app only, waiting for the monthly statement. */
+  provisional?: boolean;
 }
 
 export type MatchType = "confirmed" | "exact" | "split" | "combined" | "mismatch" | "date_mismatch" | "complete";
@@ -239,6 +241,7 @@ export function buildClaims(claimLines: ClaimLine[]): Claim[] {
       amount,
       lines,
       cancelled: Math.abs(amount) < EPS,
+      provisional: lines.every((l) => isProvisionalBatch(l.batchRef)),
     });
   }
   // A purely negative note under its own number cancels an earlier note of the
@@ -291,6 +294,14 @@ function combinations<T>(items: T[], k: number): T[][] {
  * are declared on the invoice date and debited about ten days later.
  */
 const KIND_WINDOW: Partial<Record<Kind, number>> = { phone: 20 };
+
+/**
+ * Payments read from the Jetfly app (batch ref "APP-…") until the statement
+ * replaces them. The app shows the submission date, often days or weeks after
+ * the expense.
+ */
+export const isProvisionalBatch = (ref: string) => ref.startsWith("APP-");
+const PROVISIONAL_WINDOW = 45;
 
 /**
  * Same day of month one or two months away, or day and month swapped: a typo,
@@ -362,7 +373,8 @@ export function reconcile(input: ReconcileInput, options: ReconcileOptions = {})
     else if (guessed !== null) score -= 3;
     return score;
   };
-  const windowFor = (claim: Claim) => Math.max(dateWindow, KIND_WINDOW[claim.kind] ?? 0);
+  const windowFor = (claim: Claim) =>
+    Math.max(dateWindow, KIND_WINDOW[claim.kind] ?? 0, claim.provisional ? PROVISIONAL_WINDOW : 0);
   // Date distance counts relative to the kind's window (a 10-day gap is normal for a phone bill).
   const pairScore = (claim: Claim, line: BankLine) =>
     10 - (2 * daysBetween(claim.date, line.date) * dateWindow) / windowFor(claim) + kindScore(claim, line);
