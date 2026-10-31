@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import { parseJetflyApp, parseMoney, type AppPayment } from "@/lib/jetflyApp";
+import { matchTransfers, parseJetflyApp, parseMoney, type AppPayment } from "@/lib/jetflyApp";
 import { saveAppPayments, useLedger, useLedgerActions, type Ledger } from "@/lib/ledger";
 import { eur, shortDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -62,7 +62,18 @@ function mergePayments(list: AppPayment[]): AppPayment[] {
   return [...byKey.values()].sort((a, b) => b.date.localeCompare(a.date));
 }
 
-type Row = AppPayment & { include: boolean };
+type Row = AppPayment & { include: boolean; transferDate: string | null; appDate: string };
+
+/** Payment date = arrival of the bank transfer when found; the app shows the day Jetfly sent it. */
+function withTransfers(list: AppPayment[], ledger: Ledger | null): Row[] {
+  const transfers = (ledger?.transferViews ?? []).filter((t) => t.status !== "ignored");
+  const found = matchTransfers(list, transfers);
+  return list.map((p, i) => {
+    const t = found[i];
+    const latest = p.notes.map((n) => n.date).filter(Boolean).sort().pop() ?? "";
+    return { ...p, appDate: p.date, date: t?.date ?? (p.date || latest), transferDate: t?.date ?? null, include: true };
+  });
+}
 
 export function JetflyAppImport({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const { ledger } = useLedger();
@@ -101,7 +112,7 @@ export function JetflyAppImport({ open, onOpenChange }: { open: boolean; onOpenC
         });
         return;
       }
-      setRows(found.map((p) => ({ ...p, include: true })));
+      setRows(withTransfers(found, ledger ?? null));
     } catch (e) {
       toast({ title: "Lecture impossible", description: (e as Error).message, variant: "destructive" });
     } finally {
@@ -113,7 +124,7 @@ export function JetflyAppImport({ open, onOpenChange }: { open: boolean; onOpenC
     if (!rows) return;
     setSaving(true);
     try {
-      const chosen = rows.filter((r) => r.include).map(({ include: _, ...p }) => p);
+      const chosen = rows.filter((r) => r.include).map(({ date, total, notes }) => ({ date, total, notes }));
       const r = await saveAppPayments(chosen);
       await refresh();
       toast({
@@ -132,6 +143,7 @@ export function JetflyAppImport({ open, onOpenChange }: { open: boolean; onOpenC
 
   const update = (i: number, patch: Partial<Row>) => setRows((rs) => rs!.map((r, j) => (j === i ? { ...r, ...patch } : r)));
   const count = rows?.filter((r) => r.include).reduce((s, r) => s + r.notes.length, 0) ?? 0;
+  const missingDate = rows?.some((r) => r.include && !r.date) ?? false;
 
   return (
     <Dialog open={open} onOpenChange={close}>
@@ -190,13 +202,13 @@ export function JetflyAppImport({ open, onOpenChange }: { open: boolean; onOpenC
           <div className="grid gap-4">
             <p className="text-sm text-muted-foreground">Vérifie les numéros et montants lus, corrige-les au besoin.</p>
             {rows.map((r, i) => (
-              <PaymentCard key={`${r.date}-${r.total}`} row={r} ledger={ledger ?? null} onChange={(p) => update(i, p)} />
+              <PaymentCard key={`${i}-${r.total}`} row={r} ledger={ledger ?? null} onChange={(p) => update(i, p)} />
             ))}
             <DialogFooter>
               <Button variant="outline" onClick={() => setRows(null)}>
                 Recommencer
               </Button>
-              <Button onClick={() => void save()} disabled={saving || count === 0}>
+              <Button onClick={() => void save()} disabled={saving || count === 0 || missingDate}>
                 {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                 Enregistrer {count} note{count > 1 ? "s" : ""}
               </Button>
@@ -211,8 +223,6 @@ export function JetflyAppImport({ open, onOpenChange }: { open: boolean; onOpenC
 function PaymentCard({ row, ledger, onChange }: { row: Row; ledger: Ledger | null; onChange: (patch: Partial<Row>) => void }) {
   const sum = Math.round(row.notes.reduce((s, n) => s + n.amount, 0) * 100) / 100;
   const gap = Math.abs(sum - row.total) >= 0.005;
-  const day = (iso: string) => new Date(`${iso}T12:00:00Z`).getTime() / 86400000;
-  const transfer = ledger?.transferViews.find((t) => Math.abs(t.amount_eur - row.total) < 0.005 && Math.abs(day(t.date) - day(row.date)) <= 5);
   const onStatement = (noteId: string) => {
     const c = ledger?.claimById.get(noteId);
     return c && !c.provisional;
@@ -224,10 +234,27 @@ function PaymentCard({ row, ledger, onChange }: { row: Row; ledger: Ledger | nul
     <div className={cn("rounded-lg border", !row.include && "opacity-60")}>
       <label className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2.5 border-b text-sm cursor-pointer">
         <Checkbox checked={row.include} onCheckedChange={(v) => onChange({ include: v === true })} />
-        <span className="font-medium">Virement du {shortDate(row.date)}</span>
-        <span className="ml-auto tabular-nums font-medium">{eur(row.total)}</span>
-        <span className={cn("basis-full pl-7 text-xs", transfer ? "text-success" : "text-muted-foreground")}>
-          {transfer ? `Reçu sur Boursobank le ${shortDate(transfer.date)}` : "Pas encore sur ton compte : synchronise tes banques"}
+        <span className="font-medium">Virement de {eur(row.total)}</span>
+        {row.transferDate ? (
+          <span className="ml-auto text-xs text-success">Reçu le {shortDate(row.transferDate)}</span>
+        ) : (
+          <Input
+            type="date"
+            value={row.date}
+            onChange={(e) => onChange({ date: e.target.value })}
+            onClick={(e) => e.stopPropagation()}
+            className="ml-auto h-8 w-40"
+            aria-label="Date du virement"
+          />
+        )}
+        <span className="basis-full pl-7 text-xs text-muted-foreground">
+          {row.transferDate
+            ? row.appDate && row.appDate !== row.transferDate
+              ? `Envoyé par Jetfly le ${shortDate(row.appDate)}, arrivé sur Boursobank le ${shortDate(row.transferDate)}.`
+              : "Retrouvé sur ton compte Boursobank."
+            : row.appDate
+              ? "Pas retrouvé sur ton compte : synchronise tes banques, ou vérifie la date."
+              : "Date du virement illisible sur la capture : indique-la."}
         </span>
       </label>
       <ul className="divide-y">
@@ -241,7 +268,7 @@ function PaymentCard({ row, ledger, onChange }: { row: Row; ledger: Ledger | nul
               inputMode="numeric"
               aria-label="Numéro de note"
             />
-            <span className="hidden sm:inline text-muted-foreground tabular-nums">{shortDate(n.date)}</span>
+            <span className="hidden sm:inline text-muted-foreground tabular-nums">{n.date ? shortDate(n.date) : ""}</span>
             {onStatement(n.noteId) && <span className="text-xs text-muted-foreground">déjà au relevé</span>}
             <Input
               defaultValue={n.amount.toFixed(2).replace(".", ",")}

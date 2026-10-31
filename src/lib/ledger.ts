@@ -553,6 +553,12 @@ export function useLedgerActions() {
 
   return {
     refresh,
+    /** Remove a payment read from the Jetfly app (wrong reading). */
+    deleteAppPayment: run(async (ref: string) => {
+      if (!isProvisionalBatch(ref)) throw new Error("Seuls les virements lus dans l'app Jetfly peuvent être retirés.");
+      fail((await supabase.from("claim_lines").delete().eq("batch_ref", ref)).error);
+      fail((await supabase.from("claim_batches").delete().eq("ref", ref)).error);
+    }),
     /** Keep a match (automatic or suggested) as the user's decision. */
     confirm: run(async (m: Match, comment?: string) => {
       const { error } = await supabase.from("reconciliation_links").insert({

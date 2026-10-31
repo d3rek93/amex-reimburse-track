@@ -70,3 +70,53 @@ test("December payment under a January section", () => {
   const ps = parseJetflyApp(`January 2027\n30 Dec €10.00\n#00610000 €10.00\n29 Dec 2026`, today);
   assert.equal(ps[0].date, "2026-12-30");
 });
+
+test("misread header: notes of the next payment are split off, not merged into the one above", () => {
+  const text = `21 Oct €59.99
+#00604100 €59.99
+20 Oct 2026
+2O 0ct €208.68 >
+#00604050 €208.68
+19 Oct 2026`;
+  // "2O 0ct" (letters for digits) cannot be read as a date: the payment keeps an empty date.
+  const ps = parseJetflyApp(text, today);
+  assert.equal(ps.length, 2);
+  assert.deepEqual(ps[0].notes.map((n) => n.noteId), ["604100"]);
+  assert.equal(ps[1].total, 208.68);
+  assert.equal(ps[1].date, "");
+  assert.equal(ps[1].notes[0].date, "2026-10-19");
+});
+
+test("header lost entirely: overflow split by the totals", () => {
+  const text = `21 Oct €59.99
+#00604100 €59.99
+20 Oct 2026
+#00604050 €208.68
+19 Oct 2026`;
+  const ps = parseJetflyApp(text, today);
+  assert.equal(ps.length, 2);
+  assert.equal(ps[0].total, 59.99);
+  assert.deepEqual(ps[1], { date: "", total: 208.68, notes: [{ noteId: "604050", date: "2026-10-19", amount: 208.68 }] });
+});
+
+test("OCR slips: 0ct, stuck digits", () => {
+  const [p] = parseJetflyApp(`30 0ct €265.00\n#00606116 €265.00\n28Oct 2026`, today);
+  assert.equal(p.date, "2026-10-30");
+  assert.equal(p.notes[0].date, "2026-10-28");
+});
+
+test("bank transfer of each payment: the app date is when Jetfly sent it", async () => {
+  const { matchTransfers } = await import("../src/lib/jetflyApp.ts");
+  const payments = [
+    { date: "2026-10-23", total: 38.1, notes: [] },
+    { date: "2026-10-22", total: 473.68, notes: [] },
+    { date: "", total: 208.68, notes: [{ noteId: "1", date: "2026-10-19", amount: 208.68 }] },
+  ];
+  const transfers = [
+    { id: "a", date: "2026-10-26", amount_eur: 38.1 },
+    { id: "b", date: "2026-10-26", amount_eur: 473.68 },
+    { id: "c", date: "2026-10-20", amount_eur: 208.68 },
+    { id: "d", date: "2026-09-26", amount_eur: 38.1 },
+  ];
+  assert.deepEqual(matchTransfers(payments, transfers).map((t) => t?.id), ["a", "b", "c"]);
+});

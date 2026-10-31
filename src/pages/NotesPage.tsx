@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useSearchParams } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useLedger, type BatchView, type Ledger, type TransferView } from "@/lib/ledger";
+import { useLedger, useLedgerActions, type BatchView, type Ledger, type TransferView } from "@/lib/ledger";
 import { categoryLabel, dayDate, eur, monthLabel, shortDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -101,6 +101,7 @@ function Month({ label, batches, ledger, onOpen }: { label: string; batches: Bat
 function Batch({ batch, ledger, onOpen }: { batch: BatchView; ledger: Ledger; onOpen: (noteId: string) => void }) {
   // Payments with something to handle open by default.
   const [open, setOpen] = useState(false);
+  const { deleteAppPayment } = useLedgerActions();
   const mismatch = batch.declaredTotal !== null && Math.abs(batch.declaredTotal - batch.linesTotal) >= 0.005;
   const notes = batch.noteIds.map((n) => ledger.claimById.get(n)).filter(Boolean);
   const issues = notes.filter((c) => c && ["missing", "to_review"].includes(ledger.noteStatus.get(c.noteId) ?? "")).length;
@@ -175,6 +176,14 @@ function Batch({ batch, ledger, onOpen }: { batch: BatchView; ledger: Ledger; on
               )}
             </tbody>
           </table>
+          {batch.provisional && (
+            <div className="flex flex-wrap items-center gap-2 pt-2 text-xs text-muted-foreground">
+              <span className="flex-1 min-w-[12rem]">Lu dans l'app Jetfly : le relevé du mois le confirmera ou le corrigera.</span>
+              <Button size="sm" variant="ghost" onClick={() => void deleteAppPayment(batch.ref)}>
+                Retirer cette lecture
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </div>
